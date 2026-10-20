@@ -3,7 +3,7 @@ import FlowNode from './FlowNode';
 import FlowConnector from './FlowConnector';
 import { snapToGrid, getConnectorEndpoints, getClosestPort, generateConnectorPath } from '../utils/geometry';
 import { DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '../types/constants';
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer, ArrowRight } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer, ArrowRight, LayoutTemplate, Sparkles } from 'lucide-react';
 
 export default function Canvas({
   slide,
@@ -22,6 +22,7 @@ export default function Canvas({
   onDuplicateNode,
   onAddConnector,
   onUpdateSlide,
+  onOpenTemplates,
   showGrid = true,
   gridSnap = true
 }) {
@@ -547,7 +548,7 @@ export default function Canvas({
       onMouseUp={handleMouseUp}
     >
       {/* Tool Selection Bar (Top Left of Canvas) */}
-      <div className="canvas-tool-selector-overlay">
+      <div className={`canvas-tool-selector-overlay ${!isLeftSidebarOpen ? 'shifted-for-sidebar' : ''}`}>
         <button
           className={`canvas-tool-mode-btn ${activeTool === 'select' ? 'active' : ''}`}
           onClick={() => setActiveTool && setActiveTool('select')}
@@ -889,6 +890,40 @@ export default function Canvas({
               </g>
             ))}
           </g>
+
+          {/* Empty Slide Guide Overlay */}
+          {(!slide.nodes || slide.nodes.length === 0) && (
+            <foreignObject
+              x={DEFAULT_CANVAS_WIDTH / 2 - 270}
+              y={DEFAULT_CANVAS_HEIGHT / 2 - 130}
+              width={540}
+              height={260}
+              className="canvas-empty-state-fo"
+            >
+              <div className="canvas-empty-state-card" xmlns="http://www.w3.org/1999/xhtml">
+                <div className="empty-state-icon-badge">
+                  <LayoutTemplate size={26} />
+                </div>
+                <h3 className="empty-state-title">Clean Presentation Slide</h3>
+                <p className="empty-state-desc">
+                  Drag &amp; drop shapes from the left panel to design your workflow, or select an expertly crafted pre-applied template.
+                </p>
+                <div className="empty-state-actions">
+                  <button
+                    type="button"
+                    className="empty-state-btn primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenTemplates && onOpenTemplates();
+                    }}
+                  >
+                    <Sparkles size={16} />
+                    <span>Browse Pre-Applied Templates</span>
+                  </button>
+                </div>
+              </div>
+            </foreignObject>
+          )}
         </svg>
       </div>
     </div>

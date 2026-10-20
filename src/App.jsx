@@ -13,7 +13,7 @@ import { TEMPLATES } from './utils/templates';
 import { exportToPowerPoint } from './utils/pptxExporter';
 import './App.css';
 
-const STORAGE_KEY = 'slideflow_studio_deck_v1';
+const STORAGE_KEY = 'slideflow_studio_deck_v2';
 
 function getInitialDeck() {
   try {
@@ -35,7 +35,7 @@ export default function App() {
 
   // Main Presentation Deck State
   const [presentationTitle, setPresentationTitle] = useState(
-    () => initialData?.presentationTitle || 'Enterprise Workflow Presentation'
+    () => initialData?.presentationTitle || 'Process Architecture Presentation'
   );
   const [activeTheme, setActiveTheme] = useState(() => {
     if (initialData?.themeId && THEMES[initialData.themeId]) {
@@ -64,18 +64,18 @@ export default function App() {
   // Fullscreen Presentation Mode State
   const [isPresenting, setIsPresenting] = useState(false);
 
-  // Initialize slides from storage or fallback template
+  // Initialize slides from storage or clean fresh blank slide
   const [slides, setSlides] = useState(() => {
     if (initialData?.slides && initialData.slides.length > 0) {
       return initialData.slides;
     }
     return [{
       id: `slide-${Date.now()}-0`,
-      title: TEMPLATES[0].title,
-      subtitle: TEMPLATES[0].subtitle,
-      notes: TEMPLATES[0].notes,
-      nodes: JSON.parse(JSON.stringify(TEMPLATES[0].nodes)),
-      connectors: JSON.parse(JSON.stringify(TEMPLATES[0].connectors))
+      title: 'Workflow Architecture & Decision Flow',
+      subtitle: 'Process Diagram & Operational Hierarchy',
+      notes: '',
+      nodes: [],
+      connectors: []
     }];
   });
 
@@ -816,6 +816,7 @@ export default function App() {
             onDuplicateNode={handleDuplicateNode}
             onAddConnector={handleAddConnector}
             onUpdateSlide={(updates) => updateCurrentSlide(updates)}
+            onOpenTemplates={() => setIsTemplatesOpen(true)}
             showGrid={showGrid}
             gridSnap={gridSnap}
           />

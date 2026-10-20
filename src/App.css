@@ -1902,7 +1902,7 @@
 /* Canvas Tool Mode Selector Overlay (Top Left) */
 .canvas-tool-selector-overlay {
   position: absolute;
-  top: 16px;
+  top: 14px;
   left: 20px;
   display: flex;
   align-items: center;
@@ -1914,6 +1914,12 @@
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(10px);
   z-index: 30;
+  transition: left 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Avoid overlap when left sidebar is closed and 'Shapes & Slides' floating button is visible */
+.canvas-tool-selector-overlay.shifted-for-sidebar {
+  left: 175px;
 }
 
 .canvas-tool-mode-btn {
@@ -2020,6 +2026,106 @@
 .flow-node-port-handle:hover .port-halo-ring {
   transform: scale(1.2);
   opacity: 0.6;
+}
+
+/* Empty Slide Canvas State & Browse Templates Card */
+.canvas-empty-state-fo {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-empty-state-card {
+  pointer-events: all;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px dashed rgba(56, 189, 248, 0.35);
+  border-radius: 16px;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  user-select: none;
+  animation: emptyCardAppear 0.25s ease-out;
+}
+
+.light-theme .canvas-empty-state-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px dashed rgba(14, 165, 233, 0.45);
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.empty-state-icon-badge {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--brand-primary, #38BDF8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.empty-state-title {
+  margin: 0 0 8px 0;
+  font-family: var(--font-heading, 'Outfit', sans-serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main, #F8FAFC);
+  letter-spacing: -0.01em;
+}
+
+.empty-state-desc {
+  margin: 0 0 18px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted, #94A3B8);
+  max-width: 440px;
+}
+
+.empty-state-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-state-btn.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  background: var(--brand-gradient, linear-gradient(135deg, #0EA5E9 0%, #6366F1 100%));
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.35);
+  transition: all 0.2s ease;
+}
+
+.empty-state-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(14, 165, 233, 0.5);
+}
+
+@keyframes emptyCardAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Auto-Wire Button in Sidebar */
