@@ -94,11 +94,24 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   const dx = x2 - x1;
   const dy = y2 - y1;
 
+  // Concentric multi-track lane spacing:
+  // Dynamically separates bypass loops into concentric tracks based on span distance.
+  // Shorter spans (e.g. Box 2 -> Box 3) hug the inner track (~45px),
+  // while longer bypasses (e.g. Box 1 -> Box 4) take outer tracks (+34px per tier).
+  // This guarantees parallel loop connectors never overlap on the same line.
+  const spanX = Math.abs(dx);
+  const tierX = Math.min(4, Math.max(0, Math.floor((spanX - 100) / 220)));
+  const loopOffsetY = 45 + tierX * 34;
+
+  const spanY = Math.abs(dy);
+  const tierY = Math.min(4, Math.max(0, Math.floor((spanY - 80) / 180)));
+  const loopOffsetX = 45 + tierY * 34;
+
   let rawPoints;
 
   // 1. TOP to TOP loop (Overarching bridge)
   if (fromPort === 'top' && toPort === 'top') {
-    const loopY = Math.min(y1, y2) - 50;
+    const loopY = Math.min(y1, y2) - loopOffsetY;
     rawPoints = [
       { x: x1, y: y1 },
       { x: x1, y: loopY },
@@ -108,7 +121,7 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   }
   // 2. BOTTOM to BOTTOM loop (Underarching bridge)
   else if (fromPort === 'bottom' && toPort === 'bottom') {
-    const loopY = Math.max(y1, y2) + 50;
+    const loopY = Math.max(y1, y2) + loopOffsetY;
     rawPoints = [
       { x: x1, y: y1 },
       { x: x1, y: loopY },
@@ -118,7 +131,7 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   }
   // 3. RIGHT to RIGHT loop (Right side feedback)
   else if (fromPort === 'right' && toPort === 'right') {
-    const loopX = Math.max(x1, x2) + 50;
+    const loopX = Math.max(x1, x2) + loopOffsetX;
     rawPoints = [
       { x: x1, y: y1 },
       { x: loopX, y: y1 },
@@ -128,7 +141,7 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   }
   // 4. LEFT to LEFT loop (Left side feedback)
   else if (fromPort === 'left' && toPort === 'left') {
-    const loopX = Math.min(x1, x2) - 50;
+    const loopX = Math.min(x1, x2) - loopOffsetX;
     rawPoints = [
       { x: x1, y: y1 },
       { x: loopX, y: y1 },
@@ -175,7 +188,7 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
       }
     } else {
       // Loop around if pointing backwards
-      const loopY = Math.min(y1, y2) - 50;
+      const loopY = Math.min(y1, y2) - loopOffsetY;
       rawPoints = [
         { x: x1, y: y1 },
         { x: x1 + (fromPort === 'right' ? 30 : -30), y: y1 },

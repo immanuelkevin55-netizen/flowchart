@@ -1051,7 +1051,9 @@
 }
 
 .flow-connector-group:hover .flow-connector-path {
-  stroke-width: 3;
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.7));
+  transition: stroke-width 0.15s ease;
 }
 
 .connector-label-group {
