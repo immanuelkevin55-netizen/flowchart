@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import confetti from 'canvas-confetti';
 import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import Navbar from './components/Navbar';
 import SlideDeckBar from './components/SlideDeckBar';
@@ -567,13 +566,6 @@ export default function App() {
         presentationTitle,
         canvasWidth: DEFAULT_CANVAS_WIDTH,
         canvasHeight: DEFAULT_CANVAS_HEIGHT
-      });
-
-      // Trigger Confetti Celebration!
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 }
       });
 
       showToast(`Exported "${filename}" successfully! Ready to open in PowerPoint.`, 'success');
