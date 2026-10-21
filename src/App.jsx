@@ -8,6 +8,7 @@ import PropertyPanel from './components/PropertyPanel';
 import TextToFlowModal from './components/TextToFlowModal';
 import TemplatesModal from './components/TemplatesModal';
 import PresentationModal from './components/PresentationModal';
+import LoginScreen from './components/LoginScreen';
 import { THEMES, SHAPE_TYPES, DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from './types/constants';
 import { TEMPLATES } from './utils/templates';
 import { exportToPowerPoint } from './utils/pptxExporter';
@@ -63,6 +64,27 @@ export default function App() {
 
   // Fullscreen Presentation Mode State
   const [isPresenting, setIsPresenting] = useState(false);
+
+  // User Authentication State
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ppt_user_session');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  });
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('ppt_user_session');
+    } catch (e) {
+      // ignore
+    }
+    setCurrentUser(null);
+    showToast('Signed out successfully', 'info');
+  };
 
   // Initialize slides from storage or clean fresh blank slide
   const [slides, setSlides] = useState(() => {
@@ -712,6 +734,18 @@ export default function App() {
     }
   };
 
+  // If unauthenticated, gate with the login screen
+  if (!currentUser) {
+    return (
+      <LoginScreen
+        onLogin={(user) => {
+          setCurrentUser(user);
+          showToast(`Welcome back, ${user.username}!`, 'success');
+        }}
+      />
+    );
+  }
+
   return (
     <div className={`slideflow-app-root ${isLightMode ? 'light-theme' : 'dark-theme'}`}>
       {/* Top Navigation Bar */}
@@ -745,6 +779,8 @@ export default function App() {
         onResetDeck={handleResetDeck}
         onPresent={() => setIsPresenting(true)}
         isExporting={isExporting}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Studio Workspace Layout */}

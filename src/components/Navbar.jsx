@@ -21,7 +21,9 @@ import {
   RotateCcw,
   PanelLeft,
   PanelRight,
-  Play
+  Play,
+  LogOut,
+  User
 } from 'lucide-react';
 import { THEMES } from '../types/constants';
 
@@ -54,7 +56,9 @@ export default function Navbar({
   onLoadJson,
   onResetDeck,
   onPresent,
-  isExporting
+  isExporting,
+  currentUser,
+  onLogout
 }) {
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -303,6 +307,53 @@ export default function Navbar({
             </div>
           )}
         </div>
+
+        {/* User Profile & Sign Out Button */}
+        {currentUser && (
+          <div className="navbar-user-profile" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '6px' }}>
+            <div
+              className="navbar-user-badge"
+              title={`Logged in as ${currentUser.username} (${currentUser.role || 'User'})`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                background: 'rgba(56, 189, 248, 0.1)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                borderRadius: '14px',
+                fontSize: '12px',
+                fontWeight: '600',
+                color: '#38BDF8'
+              }}
+            >
+              <User size={13} />
+              <span>{currentUser.username}</span>
+            </div>
+            <button
+              type="button"
+              className="navbar-icon-btn logout-btn"
+              onClick={onLogout}
+              title="Sign Out"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '5px 9px',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#F87171',
+                fontSize: '11px',
+                fontWeight: '600',
+                cursor: 'pointer'
+              }}
+            >
+              <LogOut size={13} />
+              <span>Exit</span>
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );
