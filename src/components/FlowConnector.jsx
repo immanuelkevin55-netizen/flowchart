@@ -110,17 +110,6 @@ export default function FlowConnector({
         />
       )}
 
-      {/* Directional Chevron at midpoint if line is unlabelled */}
-      {!label && !isEditingLabel && !isSelected && (
-        <g
-          transform={`translate(${mid.x}, ${mid.y})`}
-          className="connector-flow-chevron"
-          style={{ pointerEvents: 'none', opacity: 0.7 }}
-        >
-          <circle cx={0} cy={0} r={4} fill={color} />
-        </g>
-      )}
-
       {/* When selected: Interactive Drag Handles at Start and End points */}
       {isSelected && onStartDragEndpoint && (
         <g className="connector-endpoint-handles">
