@@ -1,3 +1,8 @@
+import { DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '../types/constants';
+
+export const HEADER_SAFE_Y = 148; // Presentation slide title & category protection clearance
+export const CANVAS_MARGIN = 35;
+
 /**
  * Calculate the exact coordinates of connection ports for a node
  */
@@ -128,7 +133,7 @@ export function computeConnectorLanes(connectors = [], nodes = []) {
   }
 
   // Allocate non-overlapping horizontal lanes
-  const assignHorizontalLanes = (loops) => {
+  const assignHorizontalLanes = (loops, isTop = false) => {
     // Sort shorter spans first (inner track), larger spans outer
     loops.sort((a, b) => a.span - b.span || a.minX - b.minX);
     const lanes = [];
@@ -151,7 +156,7 @@ export function computeConnectorLanes(connectors = [], nodes = []) {
         lanes.push([{ minX: loop.minX, maxX: loop.maxX }]);
       }
 
-      const offset = 48 + assignedLane * 36;
+      const offset = isTop ? 38 + assignedLane * 28 : 44 + assignedLane * 34;
       laneMap.set(loop.id, { lane: assignedLane, offset });
     }
   };
@@ -179,13 +184,13 @@ export function computeConnectorLanes(connectors = [], nodes = []) {
         lanes.push([{ minY: loop.minY, maxY: loop.maxY }]);
       }
 
-      const offset = 48 + assignedLane * 36;
+      const offset = 44 + assignedLane * 34;
       laneMap.set(loop.id, { lane: assignedLane, offset });
     }
   };
 
-  assignHorizontalLanes(bottomLoops);
-  assignHorizontalLanes(topLoops);
+  assignHorizontalLanes(bottomLoops, false);
+  assignHorizontalLanes(topLoops, true);
   assignVerticalLanes(rightLoops);
   assignVerticalLanes(leftLoops);
 
@@ -193,14 +198,13 @@ export function computeConnectorLanes(connectors = [], nodes = []) {
 }
 
 /**
- * Compute multi-segment points for Orthogonal (elbow) paths.
- * Supports:
- * - Multi-track collision-free lane offsets via options
- * - Overarching Top-to-Top bridges
- * - Underarching Bottom-to-Bottom bridges
- * - Right-to-Right and Left-to-Left loops
- * - Cross-port step routing
- * - Automatic alignment for nearly aligned nodes to prevent stair-step kinks
+ * Compute multi-segment points for Orthogonal (elbow) paths with Draw.io Manhattan routing.
+ * Ensures:
+ * - Strict port exit normals (leaves node outward along port direction)
+ * - Strict port entry approach (arrives from outside toward target port)
+ * - Protected slide header area (no loops or segments breach y < HEADER_SAFE_Y = 148)
+ * - Collision-free multi-track lane offsets
+ * - Collinear merging and smooth fillet corner compatibility
  */
 export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'left', options = {}) {
   const { x: x1, y: y1 } = start;
@@ -208,25 +212,32 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   const dx = x2 - x1;
   const dy = y2 - y1;
 
-  // Concentric multi-track lane spacing:
-  // Can be controlled explicitly via options.offset or options.lane
+  const minMargin = options.minMargin ?? 24;
+  const laneIndex = options.lane ?? 0;
+
+  // Multi-track lane spacing
   const spanX = Math.abs(dx);
   const fallbackTierX = Math.min(5, Math.max(0, Math.floor((spanX - 60) / 160)));
+  const assignedTierX = options.lane ?? fallbackTierX;
   const loopOffsetY = options.offset != null
     ? options.offset
-    : (options.lane != null ? 48 + options.lane * 36 : 48 + fallbackTierX * 36);
+    : (40 + assignedTierX * 28);
 
   const spanY = Math.abs(dy);
   const fallbackTierY = Math.min(5, Math.max(0, Math.floor((spanY - 60) / 140)));
+  const assignedTierY = options.lane ?? fallbackTierY;
   const loopOffsetX = options.offset != null
     ? options.offset
-    : (options.lane != null ? 48 + options.lane * 36 : 48 + fallbackTierY * 36);
+    : (40 + assignedTierY * 30);
 
   let rawPoints;
 
   // 1. TOP to TOP loop (Overarching bridge)
   if (fromPort === 'top' && toPort === 'top') {
-    const loopY = Math.min(y1, y2) - loopOffsetY;
+    const rawLoopY = Math.min(y1, y2) - loopOffsetY;
+    const safeHeaderFloor = HEADER_SAFE_Y + Math.min(56, laneIndex * 14);
+    const loopY = Math.max(safeHeaderFloor, rawLoopY);
+
     rawPoints = [
       { x: x1, y: y1 },
       { x: x1, y: loopY },
@@ -234,9 +245,11 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
       { x: x2, y: y2 }
     ];
   }
+
   // 2. BOTTOM to BOTTOM loop (Underarching bridge)
   else if (fromPort === 'bottom' && toPort === 'bottom') {
-    const loopY = Math.max(y1, y2) + loopOffsetY;
+    const rawLoopY = Math.max(y1, y2) + loopOffsetY;
+    const loopY = Math.min(DEFAULT_CANVAS_HEIGHT - 35 - Math.min(56, laneIndex * 14), rawLoopY);
     rawPoints = [
       { x: x1, y: y1 },
       { x: x1, y: loopY },
@@ -244,9 +257,11 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
       { x: x2, y: y2 }
     ];
   }
-  // 3. RIGHT to RIGHT loop (Right side feedback)
+
+  // 3. RIGHT to RIGHT loop (Right-side loop)
   else if (fromPort === 'right' && toPort === 'right') {
-    const loopX = Math.max(x1, x2) + loopOffsetX;
+    const rawLoopX = Math.max(x1, x2) + loopOffsetX;
+    const loopX = Math.min(DEFAULT_CANVAS_WIDTH - 35 - Math.min(56, laneIndex * 14), rawLoopX);
     rawPoints = [
       { x: x1, y: y1 },
       { x: loopX, y: y1 },
@@ -254,9 +269,11 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
       { x: x2, y: y2 }
     ];
   }
-  // 4. LEFT to LEFT loop (Left side feedback)
+
+  // 4. LEFT to LEFT loop (Left-side loop)
   else if (fromPort === 'left' && toPort === 'left') {
-    const loopX = Math.min(x1, x2) - loopOffsetX;
+    const rawLoopX = Math.min(x1, x2) - loopOffsetX;
+    const loopX = Math.max(35 + Math.min(56, laneIndex * 14), rawLoopX);
     rawPoints = [
       { x: x1, y: y1 },
       { x: loopX, y: y1 },
@@ -264,33 +281,17 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
       { x: x2, y: y2 }
     ];
   }
-  // 5. BOTTOM to TOP or TOP to BOTTOM
-  else if ((fromPort === 'bottom' && toPort === 'top') || (fromPort === 'top' && toPort === 'bottom')) {
-    if (Math.abs(x1 - x2) <= 12) {
-      rawPoints = [
-        { x: x1, y: y1 },
-        { x: x1, y: y2 }
-      ];
-    } else {
-      const midY = y1 + dy / 2;
-      rawPoints = [
-        { x: x1, y: y1 },
-        { x: x1, y: midY },
-        { x: x2, y: midY },
-        { x: x2, y: y2 }
-      ];
-    }
-  }
-  // 6. RIGHT to LEFT or LEFT to RIGHT
-  else if ((fromPort === 'right' && toPort === 'left') || (fromPort === 'left' && toPort === 'right')) {
-    if ((fromPort === 'right' && x2 >= x1) || (fromPort === 'left' && x2 <= x1)) {
-      if (Math.abs(y1 - y2) <= 12) {
+
+  // 5. RIGHT to LEFT (Standard forward horizontal flow or backward feedback)
+  else if (fromPort === 'right' && toPort === 'left') {
+    if (x2 >= x1 + minMargin * 2) {
+      if (Math.abs(y1 - y2) <= 4) {
         rawPoints = [
           { x: x1, y: y1 },
-          { x: x2, y: y1 }
+          { x: x2, y: y2 }
         ];
       } else {
-        const midX = x1 + dx / 2;
+        const midX = (x1 + x2) / 2;
         rawPoints = [
           { x: x1, y: y1 },
           { x: midX, y: y1 },
@@ -299,52 +300,303 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
         ];
       }
     } else {
-      const loopY = Math.min(y1, y2) - loopOffsetY;
+      // Backward feedback loop
+      const rawLoopY = Math.min(y1, y2) - loopOffsetY;
+      const safeHeaderFloor = HEADER_SAFE_Y + Math.min(56, laneIndex * 14);
+      const loopY = Math.max(safeHeaderFloor, rawLoopY);
+      const exitX = x1 + minMargin;
+      const enterX = x2 - minMargin;
       rawPoints = [
         { x: x1, y: y1 },
-        { x: x1 + (fromPort === 'right' ? 30 : -30), y: y1 },
-        { x: x1 + (fromPort === 'right' ? 30 : -30), y: loopY },
-        { x: x2 + (toPort === 'left' ? -30 : 30), y: loopY },
-        { x: x2 + (toPort === 'left' ? -30 : 30), y: y2 },
+        { x: exitX, y: y1 },
+        { x: exitX, y: loopY },
+        { x: enterX, y: loopY },
+        { x: enterX, y: y2 },
         { x: x2, y: y2 }
       ];
     }
   }
-  // 7. BOTTOM to LEFT / BOTTOM to RIGHT
-  else if (fromPort === 'bottom' && (toPort === 'left' || toPort === 'right')) {
-    rawPoints = [
-      { x: x1, y: y1 },
-      { x: x1, y: y2 },
-      { x: x2, y: y2 }
-    ];
+
+  // 6. LEFT to RIGHT (Opposite horizontal flow or backward feedback)
+  else if (fromPort === 'left' && toPort === 'right') {
+    if (x2 <= x1 - minMargin * 2) {
+      if (Math.abs(y1 - y2) <= 4) {
+        rawPoints = [
+          { x: x1, y: y1 },
+          { x: x2, y: y2 }
+        ];
+      } else {
+        const midX = (x1 + x2) / 2;
+        rawPoints = [
+          { x: x1, y: y1 },
+          { x: midX, y: y1 },
+          { x: midX, y: y2 },
+          { x: x2, y: y2 }
+        ];
+      }
+    } else {
+      // Backward loop
+      const rawLoopY = Math.min(y1, y2) - loopOffsetY;
+      const safeHeaderFloor = HEADER_SAFE_Y + Math.min(56, laneIndex * 14);
+      const loopY = Math.max(safeHeaderFloor, rawLoopY);
+      const exitX = x1 - minMargin;
+      const enterX = x2 + minMargin;
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: exitX, y: y1 },
+        { x: exitX, y: loopY },
+        { x: enterX, y: loopY },
+        { x: enterX, y: y2 },
+        { x: x2, y: y2 }
+      ];
+    }
   }
-  // 8. TOP to LEFT / TOP to RIGHT
-  else if (fromPort === 'top' && (toPort === 'left' || toPort === 'right')) {
-    rawPoints = [
-      { x: x1, y: y1 },
-      { x: x1, y: y2 },
-      { x: x2, y: y2 }
-    ];
+
+  // 7. BOTTOM to TOP (Downward vertical flow or upward feedback)
+  else if (fromPort === 'bottom' && toPort === 'top') {
+    if (y2 >= y1 + minMargin * 2) {
+      if (Math.abs(x1 - x2) <= 4) {
+        rawPoints = [
+          { x: x1, y: y1 },
+          { x: x2, y: y2 }
+        ];
+      } else {
+        const midY = (y1 + y2) / 2;
+        rawPoints = [
+          { x: x1, y: y1 },
+          { x: x1, y: midY },
+          { x: x2, y: midY },
+          { x: x2, y: y2 }
+        ];
+      }
+    } else {
+      // Upward feedback loop: routes around laterally
+      const routeRight = x2 >= x1;
+      const loopX = routeRight
+        ? Math.min(DEFAULT_CANVAS_WIDTH - 35, Math.max(x1, x2) + loopOffsetX)
+        : Math.max(35, Math.min(x1, x2) - loopOffsetX);
+      const exitY = y1 + minMargin;
+      const enterY = Math.max(HEADER_SAFE_Y, y2 - minMargin);
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: exitY },
+        { x: loopX, y: exitY },
+        { x: loopX, y: enterY },
+        { x: x2, y: enterY },
+        { x: x2, y: y2 }
+      ];
+    }
   }
-  // 9. RIGHT to TOP / RIGHT to BOTTOM
-  else if (fromPort === 'right' && (toPort === 'top' || toPort === 'bottom')) {
-    rawPoints = [
-      { x: x1, y: y1 },
-      { x: x2, y: y1 },
-      { x: x2, y: y2 }
-    ];
+
+  // 8. TOP to BOTTOM (Upward vertical flow or downward feedback)
+  else if (fromPort === 'top' && toPort === 'bottom') {
+    if (y2 <= y1 - minMargin * 2) {
+      if (Math.abs(x1 - x2) <= 4) {
+        rawPoints = [
+          { x: x1, y: y1 },
+          { x: x2, y: y2 }
+        ];
+      } else {
+        const midY = (y1 + y2) / 2;
+        rawPoints = [
+          { x: x1, y: y1 },
+          { x: x1, y: midY },
+          { x: x2, y: midY },
+          { x: x2, y: y2 }
+        ];
+      }
+    } else {
+      // Downward loop: routes around laterally
+      const routeRight = x2 >= x1;
+      const loopX = routeRight
+        ? Math.min(DEFAULT_CANVAS_WIDTH - 35, Math.max(x1, x2) + loopOffsetX)
+        : Math.max(35, Math.min(x1, x2) - loopOffsetX);
+      const exitY = Math.max(HEADER_SAFE_Y, y1 - minMargin);
+      const enterY = y2 + minMargin;
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: exitY },
+        { x: loopX, y: exitY },
+        { x: loopX, y: enterY },
+        { x: x2, y: enterY },
+        { x: x2, y: y2 }
+      ];
+    }
   }
-  // 10. LEFT to TOP / LEFT to BOTTOM
-  else if (fromPort === 'left' && (toPort === 'top' || toPort === 'bottom')) {
-    rawPoints = [
-      { x: x1, y: y1 },
-      { x: x2, y: y1 },
-      { x: x2, y: y2 }
-    ];
+
+  // 9. BOTTOM to LEFT (Exits down, enters rightward into left)
+  else if (fromPort === 'bottom' && toPort === 'left') {
+    if (x2 >= x1 + minMargin && y2 >= y1 + minMargin) {
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: y2 },
+        { x: x2, y: y2 }
+      ];
+    } else {
+      const exitY = y1 + minMargin;
+      const enterX = x2 - minMargin;
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: exitY },
+        { x: enterX, y: exitY },
+        { x: enterX, y: y2 },
+        { x: x2, y: y2 }
+      ];
+    }
   }
-  // Fallback step
+
+  // 10. BOTTOM to RIGHT (Exits down, enters leftward into right)
+  else if (fromPort === 'bottom' && toPort === 'right') {
+    if (x2 <= x1 - minMargin && y2 >= y1 + minMargin) {
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: y2 },
+        { x: x2, y: y2 }
+      ];
+    } else {
+      const exitY = y1 + minMargin;
+      const enterX = x2 + minMargin;
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: exitY },
+        { x: enterX, y: exitY },
+        { x: enterX, y: y2 },
+        { x: x2, y: y2 }
+      ];
+    }
+  }
+
+  // 11. TOP to LEFT (Exits up, enters rightward into left)
+  else if (fromPort === 'top' && toPort === 'left') {
+    if (x2 >= x1 + minMargin && y2 <= y1 - minMargin) {
+      const safeY = Math.max(HEADER_SAFE_Y, y2);
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: safeY },
+        { x: x2, y: safeY }
+      ];
+    } else {
+      const exitY = Math.max(HEADER_SAFE_Y, y1 - minMargin);
+      const enterX = x2 - minMargin;
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: exitY },
+        { x: enterX, y: exitY },
+        { x: enterX, y: y2 },
+        { x: x2, y: y2 }
+      ];
+    }
+  }
+
+  // 12. TOP to RIGHT (Exits up, enters leftward into right)
+  else if (fromPort === 'top' && toPort === 'right') {
+    if (x2 <= x1 - minMargin && y2 <= y1 - minMargin) {
+      const safeY = Math.max(HEADER_SAFE_Y, y2);
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: safeY },
+        { x: x2, y: safeY }
+      ];
+    } else {
+      const exitY = Math.max(HEADER_SAFE_Y, y1 - minMargin);
+      const enterX = x2 + minMargin;
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x1, y: exitY },
+        { x: enterX, y: exitY },
+        { x: enterX, y: y2 },
+        { x: x2, y: y2 }
+      ];
+    }
+  }
+
+  // 13. RIGHT to TOP (Exits right, enters downward into top)
+  else if (fromPort === 'right' && toPort === 'top') {
+    if (x2 >= x1 + minMargin && y2 >= y1 + minMargin) {
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x2, y: y1 },
+        { x: x2, y: y2 }
+      ];
+    } else {
+      const exitX = x1 + minMargin;
+      const enterY = Math.max(HEADER_SAFE_Y, y2 - minMargin);
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: exitX, y: y1 },
+        { x: exitX, y: enterY },
+        { x: x2, y: enterY },
+        { x: x2, y: y2 }
+      ];
+    }
+  }
+
+  // 14. RIGHT to BOTTOM (Exits right, enters upward into bottom)
+  else if (fromPort === 'right' && toPort === 'bottom') {
+    if (x2 >= x1 + minMargin && y2 <= y1 - minMargin) {
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x2, y: y1 },
+        { x: x2, y: y2 }
+      ];
+    } else {
+      const exitX = x1 + minMargin;
+      const enterY = Math.min(DEFAULT_CANVAS_HEIGHT - 35, y2 + minMargin);
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: exitX, y: y1 },
+        { x: exitX, y: enterY },
+        { x: x2, y: enterY },
+        { x: x2, y: y2 }
+      ];
+    }
+  }
+
+  // 15. LEFT to TOP (Exits left, enters downward into top)
+  else if (fromPort === 'left' && toPort === 'top') {
+    if (x2 <= x1 - minMargin && y2 >= y1 + minMargin) {
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x2, y: y1 },
+        { x: x2, y: y2 }
+      ];
+    } else {
+      const exitX = x1 - minMargin;
+      const enterY = Math.max(HEADER_SAFE_Y, y2 - minMargin);
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: exitX, y: y1 },
+        { x: exitX, y: enterY },
+        { x: x2, y: enterY },
+        { x: x2, y: y2 }
+      ];
+    }
+  }
+
+  // 16. LEFT to BOTTOM (Exits left, enters upward into bottom)
+  else if (fromPort === 'left' && toPort === 'bottom') {
+    if (x2 <= x1 - minMargin && y2 <= y1 - minMargin) {
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: x2, y: y1 },
+        { x: x2, y: y2 }
+      ];
+    } else {
+      const exitX = x1 - minMargin;
+      const enterY = Math.min(DEFAULT_CANVAS_HEIGHT - 35, y2 + minMargin);
+      rawPoints = [
+        { x: x1, y: y1 },
+        { x: exitX, y: y1 },
+        { x: exitX, y: enterY },
+        { x: x2, y: enterY },
+        { x: x2, y: y2 }
+      ];
+    }
+  }
+
+  // Fallback step (safely routed)
   else {
-    const midX = x1 + dx / 2;
+    const midX = (x1 + x2) / 2;
     rawPoints = [
       { x: x1, y: y1 },
       { x: midX, y: y1 },

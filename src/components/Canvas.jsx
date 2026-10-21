@@ -31,9 +31,37 @@ export default function Canvas({
 
   // Pan & Zoom state
   const [zoom, setZoom] = useState(0.85);
-  const [pan, setPan] = useState({ x: 40, y: 30 });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+
+  // Global spacebar listener for Draw.io-style grab-to-pan
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && !e.repeat) {
+        const tag = document.activeElement?.tagName?.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) {
+          return;
+        }
+        e.preventDefault();
+        setIsSpacePressed(true);
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   // Node Dragging state
   const [draggingNode, setDraggingNode] = useState(null);
@@ -90,9 +118,9 @@ export default function Canvas({
     const { clientWidth, clientHeight } = containerRef.current;
     if (clientWidth <= 0 || clientHeight <= 0) return;
 
-    // Responsive margins: 30-60px padding
-    const padX = Math.max(30, Math.min(60, clientWidth * 0.05));
-    const padY = Math.max(25, Math.min(45, clientHeight * 0.05));
+    // Responsive margins: 36-70px padding for beautiful balanced centering
+    const padX = Math.max(36, Math.min(70, clientWidth * 0.05));
+    const padY = Math.max(30, Math.min(50, clientHeight * 0.05));
 
     const availableWidth = clientWidth - padX * 2;
     const availableHeight = clientHeight - padY * 2;
@@ -108,8 +136,40 @@ export default function Canvas({
 
     setZoom(clamped);
     setPan({
-      x: Math.max(16, centeredX),
-      y: Math.max(16, centeredY)
+      x: centeredX,
+      y: centeredY
+    });
+  }, []);
+
+  // Reset to 100% zoom and center slide in viewport
+  const resetTo100 = useCallback(() => {
+    if (!containerRef.current) {
+      setZoom(1);
+      return;
+    }
+    const { clientWidth, clientHeight } = containerRef.current;
+    const centeredX = Math.round((clientWidth - DEFAULT_CANVAS_WIDTH) / 2);
+    const centeredY = Math.round((clientHeight - DEFAULT_CANVAS_HEIGHT) / 2);
+    setZoom(1);
+    setPan({ x: centeredX, y: centeredY });
+  }, []);
+
+  // Zoom In / Zoom Out by step centered at viewport center
+  const handleZoomStep = useCallback((delta) => {
+    if (!containerRef.current) return;
+    const { clientWidth, clientHeight } = containerRef.current;
+    const cx = clientWidth / 2;
+    const cy = clientHeight / 2;
+
+    setZoom((prevZoom) => {
+      const newZoom = Math.max(0.3, Math.min(2.5, Number((prevZoom + delta).toFixed(2))));
+      if (newZoom === prevZoom) return prevZoom;
+      const ratio = newZoom / prevZoom;
+      setPan((prevPan) => ({
+        x: Math.round(cx - (cx - prevPan.x) * ratio),
+        y: Math.round(cy - (cy - prevPan.y) * ratio)
+      }));
+      return newZoom;
     });
   }, []);
 
@@ -146,8 +206,8 @@ export default function Canvas({
     }
 
     const projectedW = Math.max(300, currentW + deltaW);
-    const padX = Math.max(30, Math.min(60, projectedW * 0.05));
-    const padY = Math.max(25, Math.min(45, currentH * 0.05));
+    const padX = Math.max(36, Math.min(70, projectedW * 0.05));
+    const padY = Math.max(30, Math.min(50, currentH * 0.05));
 
     const targetZoom = Math.min(
       (projectedW - padX * 2) / DEFAULT_CANVAS_WIDTH,
@@ -158,11 +218,10 @@ export default function Canvas({
     const centeredX = Math.round((projectedW - DEFAULT_CANVAS_WIDTH * clamped) / 2);
     const centeredY = Math.round((currentH - DEFAULT_CANVAS_HEIGHT * clamped) / 2);
 
-    // Instantly apply target zoom & pan so CSS transform transition matches sidebar transition smoothly
     setZoom(clamped);
     setPan({
-      x: Math.max(16, centeredX),
-      y: Math.max(16, centeredY)
+      x: centeredX,
+      y: centeredY
     });
 
     // Final subpixel alignment check after CSS animation completes
@@ -193,17 +252,39 @@ export default function Canvas({
     };
   }, [fitToScreen]);
 
-  // Mouse wheel zoom
+  // Mouse wheel zoom (Draw.io style zoom-to-cursor)
   const handleWheel = (e) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      setZoom((z) => Math.max(0.3, Math.min(2.5, z * zoomFactor)));
-    } else {
-      // Pan with trackpad
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const factor = e.deltaY < 0 ? 1.08 : 0.92;
+
+      setZoom((prevZoom) => {
+        const newZoom = Math.max(0.3, Math.min(2.5, Number((prevZoom * factor).toFixed(3))));
+        if (newZoom === prevZoom) return prevZoom;
+        const ratio = newZoom / prevZoom;
+        setPan((prevPan) => ({
+          x: Math.round(mouseX - (mouseX - prevPan.x) * ratio),
+          y: Math.round(mouseY - (mouseY - prevPan.y) * ratio)
+        }));
+        return newZoom;
+      });
+    } else if (e.shiftKey) {
+      // Shift + Wheel = Horizontal Scroll
+      e.preventDefault();
       setPan((p) => ({
-        x: p.x - e.deltaX * 0.8,
-        y: p.y - e.deltaY * 0.8
+        ...p,
+        x: p.x - e.deltaY * 0.85
+      }));
+    } else {
+      // 2D Pan on trackpad or vertical scroll
+      setPan((p) => ({
+        x: p.x - e.deltaX * 0.85,
+        y: p.y - e.deltaY * 0.85
       }));
     }
   };
@@ -211,7 +292,7 @@ export default function Canvas({
   // Canvas Mouse Down: Start Pan, or Start Freeform Arrow if Arrow Tool active
   const handleCanvasMouseDown = (e) => {
     // If middle click or space key held, start panning
-    if (e.button === 1 || e.spaceKey) {
+    if (e.button === 1 || isSpacePressed) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
       onSelect(null, null);
@@ -401,7 +482,7 @@ export default function Canvas({
 
       onUpdateNode(draggingNode, {
         x: Math.max(0, Math.min(DEFAULT_CANVAS_WIDTH - 150, newX)),
-        y: Math.max(120, Math.min(DEFAULT_CANVAS_HEIGHT - 80, newY))
+        y: Math.max(148, Math.min(DEFAULT_CANVAS_HEIGHT - 80, newY))
       });
       return;
     }
@@ -554,7 +635,7 @@ export default function Canvas({
   return (
     <div
       ref={containerRef}
-      className={`canvas-viewport ${activeTool === 'connector' ? 'tool-connector-active' : ''} ${(connecting || draggingEndpoint) ? 'is-connecting' : ''}`}
+      className={`canvas-viewport ${isSpacePressed ? 'is-space-pressed' : ''} ${isPanning ? 'is-panning' : ''} ${activeTool === 'connector' ? 'tool-connector-active' : ''} ${(connecting || draggingEndpoint) ? 'is-connecting' : ''}`}
       onWheel={handleWheel}
       onMouseDown={handleCanvasMouseDown}
       onMouseMove={handleMouseMove}
@@ -580,23 +661,30 @@ export default function Canvas({
         </button>
       </div>
 
-      {/* Zoom / Pan Floating Control Bar */}
+      {/* Zoom / Pan Floating Control Bar (Draw.io style) */}
       <div className="canvas-controls-overlay">
         <button
           className="canvas-ctrl-btn"
-          onClick={() => setZoom((z) => Math.min(2.2, z + 0.1))}
-          title="Zoom In (Ctrl + Scroll)"
-        >
-          <ZoomIn size={15} />
-        </button>
-        <span className="canvas-zoom-label">{Math.round(zoom * 100)}%</span>
-        <button
-          className="canvas-ctrl-btn"
-          onClick={() => setZoom((z) => Math.max(0.3, z - 0.1))}
+          onClick={() => handleZoomStep(-0.1)}
           title="Zoom Out (Ctrl - Scroll)"
         >
           <ZoomOut size={15} />
         </button>
+        <button
+          className="canvas-zoom-label-btn"
+          onClick={resetTo100}
+          title="Click to Reset 100% (Draw.io)"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          className="canvas-ctrl-btn"
+          onClick={() => handleZoomStep(0.1)}
+          title="Zoom In (Ctrl + Scroll)"
+        >
+          <ZoomIn size={15} />
+        </button>
+        <div className="canvas-ctrl-divider" />
         <button
           className="canvas-ctrl-btn"
           onClick={fitToScreen}
@@ -606,11 +694,8 @@ export default function Canvas({
         </button>
         <button
           className="canvas-ctrl-btn"
-          onClick={() => {
-            setZoom(1);
-            setPan({ x: 50, y: 50 });
-          }}
-          title="Reset View 100%"
+          onClick={resetTo100}
+          title="Reset View 100% (Centered)"
         >
           <RotateCcw size={15} />
         </button>
