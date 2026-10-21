@@ -80,32 +80,147 @@ export function simplifyOrthogonalPoints(points) {
 }
 
 /**
+ * Computes non-overlapping lane offsets for parallel connectors across a slide.
+ * Solves interval allocation so parallel bottom-to-bottom or top-to-top lines
+ * never collide or overlap on the same horizontal baseline.
+ */
+export function computeConnectorLanes(connectors = [], nodes = []) {
+  const nodeMap = new Map((nodes || []).map((n) => [n.id, n]));
+  const laneMap = new Map();
+
+  const bottomLoops = [];
+  const topLoops = [];
+  const rightLoops = [];
+  const leftLoops = [];
+
+  for (const conn of (connectors || [])) {
+    const fromNode = nodeMap.get(conn.fromId);
+    const toNode = nodeMap.get(conn.toId);
+    const { start, end, fromPort, toPort } = getConnectorEndpoints(conn, fromNode, toNode);
+
+    // If user explicitly specified a manual offset, respect it directly
+    if (conn.offset !== undefined && conn.offset !== null && conn.offset !== '') {
+      laneMap.set(conn.id, { offset: Number(conn.offset), lane: conn.lane ?? 0 });
+      continue;
+    }
+
+    if (fromPort === 'bottom' && toPort === 'bottom') {
+      const minX = Math.min(start.x, end.x);
+      const maxX = Math.max(start.x, end.x);
+      const span = maxX - minX;
+      bottomLoops.push({ id: conn.id, minX, maxX, span, start, end });
+    } else if (fromPort === 'top' && toPort === 'top') {
+      const minX = Math.min(start.x, end.x);
+      const maxX = Math.max(start.x, end.x);
+      const span = maxX - minX;
+      topLoops.push({ id: conn.id, minX, maxX, span, start, end });
+    } else if (fromPort === 'right' && toPort === 'right') {
+      const minY = Math.min(start.y, end.y);
+      const maxY = Math.max(start.y, end.y);
+      const span = maxY - minY;
+      rightLoops.push({ id: conn.id, minY, maxY, span, start, end });
+    } else if (fromPort === 'left' && toPort === 'left') {
+      const minY = Math.min(start.y, end.y);
+      const maxY = Math.max(start.y, end.y);
+      const span = maxY - minY;
+      leftLoops.push({ id: conn.id, minY, maxY, span, start, end });
+    }
+  }
+
+  // Allocate non-overlapping horizontal lanes
+  const assignHorizontalLanes = (loops) => {
+    // Sort shorter spans first (inner track), larger spans outer
+    loops.sort((a, b) => a.span - b.span || a.minX - b.minX);
+    const lanes = [];
+
+    for (const loop of loops) {
+      let assignedLane = -1;
+      for (let l = 0; l < lanes.length; l++) {
+        const hasCollision = lanes[l].some(
+          (interval) => !(loop.maxX <= interval.minX + 15 || loop.minX >= interval.maxX - 15)
+        );
+        if (!hasCollision) {
+          assignedLane = l;
+          lanes[l].push({ minX: loop.minX, maxX: loop.maxX });
+          break;
+        }
+      }
+
+      if (assignedLane === -1) {
+        assignedLane = lanes.length;
+        lanes.push([{ minX: loop.minX, maxX: loop.maxX }]);
+      }
+
+      const offset = 48 + assignedLane * 36;
+      laneMap.set(loop.id, { lane: assignedLane, offset });
+    }
+  };
+
+  // Allocate non-overlapping vertical lanes
+  const assignVerticalLanes = (loops) => {
+    loops.sort((a, b) => a.span - b.span || a.minY - b.minY);
+    const lanes = [];
+
+    for (const loop of loops) {
+      let assignedLane = -1;
+      for (let l = 0; l < lanes.length; l++) {
+        const hasCollision = lanes[l].some(
+          (interval) => !(loop.maxY <= interval.minY + 15 || loop.minY >= interval.maxY - 15)
+        );
+        if (!hasCollision) {
+          assignedLane = l;
+          lanes[l].push({ minY: loop.minY, maxY: loop.maxY });
+          break;
+        }
+      }
+
+      if (assignedLane === -1) {
+        assignedLane = lanes.length;
+        lanes.push([{ minY: loop.minY, maxY: loop.maxY }]);
+      }
+
+      const offset = 48 + assignedLane * 36;
+      laneMap.set(loop.id, { lane: assignedLane, offset });
+    }
+  };
+
+  assignHorizontalLanes(bottomLoops);
+  assignHorizontalLanes(topLoops);
+  assignVerticalLanes(rightLoops);
+  assignVerticalLanes(leftLoops);
+
+  return laneMap;
+}
+
+/**
  * Compute multi-segment points for Orthogonal (elbow) paths.
  * Supports:
- * - Overarching Top-to-Top bridges (e.g. from top of Box 1 up and over to top of Box 2)
- * - Underarching Bottom-to-Bottom bridges (e.g. from bottom of Box 3 down and under to bottom of Box 4)
+ * - Multi-track collision-free lane offsets via options
+ * - Overarching Top-to-Top bridges
+ * - Underarching Bottom-to-Bottom bridges
  * - Right-to-Right and Left-to-Left loops
  * - Cross-port step routing
  * - Automatic alignment for nearly aligned nodes to prevent stair-step kinks
  */
-export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'left') {
+export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'left', options = {}) {
   const { x: x1, y: y1 } = start;
   const { x: x2, y: y2 } = end;
   const dx = x2 - x1;
   const dy = y2 - y1;
 
   // Concentric multi-track lane spacing:
-  // Dynamically separates bypass loops into concentric tracks based on span distance.
-  // Shorter spans (e.g. Box 2 -> Box 3) hug the inner track (~45px),
-  // while longer bypasses (e.g. Box 1 -> Box 4) take outer tracks (+34px per tier).
-  // This guarantees parallel loop connectors never overlap on the same line.
+  // Can be controlled explicitly via options.offset or options.lane
   const spanX = Math.abs(dx);
-  const tierX = Math.min(4, Math.max(0, Math.floor((spanX - 100) / 220)));
-  const loopOffsetY = 45 + tierX * 34;
+  const fallbackTierX = Math.min(5, Math.max(0, Math.floor((spanX - 60) / 160)));
+  const loopOffsetY = options.offset != null
+    ? options.offset
+    : (options.lane != null ? 48 + options.lane * 36 : 48 + fallbackTierX * 36);
 
   const spanY = Math.abs(dy);
-  const tierY = Math.min(4, Math.max(0, Math.floor((spanY - 80) / 180)));
-  const loopOffsetX = 45 + tierY * 34;
+  const fallbackTierY = Math.min(5, Math.max(0, Math.floor((spanY - 60) / 140)));
+  const loopOffsetX = options.offset != null
+    ? options.offset
+    : (options.lane != null ? 48 + options.lane * 36 : 48 + fallbackTierY * 36);
 
   let rawPoints;
 
@@ -151,7 +266,6 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   }
   // 5. BOTTOM to TOP or TOP to BOTTOM
   else if ((fromPort === 'bottom' && toPort === 'top') || (fromPort === 'top' && toPort === 'bottom')) {
-    // If nearly aligned vertically within 12px, render as a single straight vertical line
     if (Math.abs(x1 - x2) <= 12) {
       rawPoints = [
         { x: x1, y: y1 },
@@ -169,9 +283,7 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   }
   // 6. RIGHT to LEFT or LEFT to RIGHT
   else if ((fromPort === 'right' && toPort === 'left') || (fromPort === 'left' && toPort === 'right')) {
-    // Forward progression
     if ((fromPort === 'right' && x2 >= x1) || (fromPort === 'left' && x2 <= x1)) {
-      // If nearly aligned horizontally within 12px, render as a single straight horizontal line
       if (Math.abs(y1 - y2) <= 12) {
         rawPoints = [
           { x: x1, y: y1 },
@@ -187,7 +299,6 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
         ];
       }
     } else {
-      // Loop around if pointing backwards
       const loopY = Math.min(y1, y2) - loopOffsetY;
       rawPoints = [
         { x: x1, y: y1 },
@@ -246,9 +357,10 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
 }
 
 /**
- * Generate SVG Path string for connectors (Orthogonal, Straight, Curved)
+ * Generate SVG Path string for connectors (Orthogonal, Straight, Curved).
+ * Automatically applies smooth rounded fillet corners for orthogonal elbows.
  */
-export function generateConnectorPath(start, end, type = 'orthogonal', fromPort = 'right', toPort = 'left') {
+export function generateConnectorPath(start, end, type = 'orthogonal', fromPort = 'right', toPort = 'left', options = {}) {
   const { x: x1, y: y1 } = start;
   const { x: x2, y: y2 } = end;
 
@@ -279,20 +391,64 @@ export function generateConnectorPath(start, end, type = 'orthogonal', fromPort 
     return `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`;
   }
 
-  // Orthogonal Multi-Segment Path
-  const points = getOrthogonalPoints(start, end, fromPort, toPort);
-  return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
+  // Orthogonal Multi-Segment Path with Smooth Rounded Fillet Corners
+  const points = getOrthogonalPoints(start, end, fromPort, toPort, options);
+  if (!points || points.length === 0) return '';
+  if (points.length <= 2) {
+    return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
+  }
+
+  const r = options.cornerRadius ?? 12;
+  let d = `M ${points[0].x} ${points[0].y}`;
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+
+    const d1x = curr.x - prev.x;
+    const d1y = curr.y - prev.y;
+    const len1 = Math.hypot(d1x, d1y);
+
+    const d2x = next.x - curr.x;
+    const d2y = next.y - curr.y;
+    const len2 = Math.hypot(d2x, d2y);
+
+    if (len1 < 1 || len2 < 1) {
+      d += ` L ${curr.x} ${curr.y}`;
+      continue;
+    }
+
+    const radius = Math.min(r, len1 / 2, len2 / 2);
+
+    const u1x = d1x / len1;
+    const u1y = d1y / len1;
+    const u2x = d2x / len2;
+    const u2y = d2y / len2;
+
+    const bx = curr.x - u1x * radius;
+    const by = curr.y - u1y * radius;
+    const ax = curr.x + u2x * radius;
+    const ay = curr.y + u2y * radius;
+
+    d += ` L ${bx} ${by}`;
+    d += ` Q ${curr.x} ${curr.y} ${ax} ${ay}`;
+  }
+
+  const last = points[points.length - 1];
+  d += ` L ${last.x} ${last.y}`;
+  return d;
 }
 
 /**
- * Calculate the midpoint of a connector for placing labels
+ * Calculate the midpoint of a connector for placing labels or directional badges
  */
-export function getConnectorMidpoint(start, end, type = 'orthogonal', fromPort = 'right', toPort = 'left') {
+export function getConnectorMidpoint(start, end, type = 'orthogonal', fromPort = 'right', toPort = 'left', options = {}) {
   if (type === 'straight' || type === 'curved') {
     return { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
   }
 
-  const points = getOrthogonalPoints(start, end, fromPort, toPort);
+  const points = getOrthogonalPoints(start, end, fromPort, toPort, options);
   if (points.length >= 4) {
     // The horizontal or vertical bridge segment in the middle
     const p1 = points[1];
@@ -301,7 +457,6 @@ export function getConnectorMidpoint(start, end, type = 'orthogonal', fromPort =
   }
 
   if (points.length === 3) {
-    // Pick midpoint of the longer segment
     const d1 = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
     const d2 = Math.hypot(points[2].x - points[1].x, points[2].y - points[1].y);
     if (d1 >= d2) {

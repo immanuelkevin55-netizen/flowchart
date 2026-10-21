@@ -1,5 +1,5 @@
 import pptxgen from 'pptxgenjs';
-import { getNodePortCoordinates, getConnectorEndpoints, getConnectorMidpoint, getOrthogonalPoints } from './geometry';
+import { getNodePortCoordinates, getConnectorEndpoints, getConnectorMidpoint, getOrthogonalPoints, computeConnectorLanes } from './geometry';
 import { SHAPE_TYPES, DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '../types/constants';
 
 /**
@@ -127,6 +127,8 @@ export async function exportToPowerPoint({
 
     // 3. Connectors & Lines
     const connectors = slideData.connectors || [];
+    const laneMap = computeConnectorLanes(connectors, slideData.nodes || []);
+
     for (const conn of connectors) {
       const fromNode = nodesMap.get(conn.fromId);
       const toNode = nodesMap.get(conn.toId);
@@ -194,7 +196,8 @@ export async function exportToPowerPoint({
         // Orthogonal Multi-Segment Connector in PowerPoint
         const fromPort = conn.fromPort || 'right';
         const toPort = conn.toPort || 'left';
-        const points = getOrthogonalPoints(start, end, fromPort, toPort);
+        const laneOptions = laneMap.get(conn.id) || {};
+        const points = getOrthogonalPoints(start, end, fromPort, toPort, laneOptions);
 
         // Collect valid segments and filter out degenerate segments (length < 0.005 inches)
         const validSegments = [];

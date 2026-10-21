@@ -7,6 +7,9 @@ export default function FlowNode({
   isSelected,
   isTargeted,
   targetPort,
+  isHoveredAsSource = false,
+  isHoveredAsTarget = false,
+  isDimmed = false,
   onSelect,
   onUpdate,
   onDelete,
@@ -245,8 +248,12 @@ export default function FlowNode({
 
   return (
     <g
-      className={`flow-node-group ${isSelected ? 'selected' : ''}`}
+      className={`flow-node-group ${isSelected ? 'selected' : ''} ${isHoveredAsSource ? 'source-active' : ''} ${isHoveredAsTarget ? 'target-active' : ''}`}
       transform={`translate(${x}, ${y})`}
+      style={{
+        opacity: isDimmed ? 0.35 : 1,
+        transition: 'opacity 0.2s ease'
+      }}
       onClick={(e) => {
         e.stopPropagation();
         onSelect(id, e);
@@ -256,6 +263,74 @@ export default function FlowNode({
         setIsEditing(true);
       }}
     >
+      {/* Source Highlight Glow & Badge when connected arrow is hovered */}
+      {isHoveredAsSource && (
+        <g className="node-source-highlight" style={{ pointerEvents: 'none' }}>
+          <rect
+            x={-6}
+            y={-6}
+            width={width + 12}
+            height={height + 12}
+            rx={14}
+            fill="none"
+            stroke="#10B981"
+            strokeWidth={3}
+            filter="drop-shadow(0 0 10px rgba(16, 185, 129, 0.8))"
+          />
+          <foreignObject x={width / 2 - 42} y={-26} width={84} height={24}>
+            <div
+              style={{
+                background: '#10B981',
+                color: '#FFFFFF',
+                borderRadius: '12px',
+                fontSize: '10px',
+                fontWeight: '700',
+                textAlign: 'center',
+                lineHeight: '20px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                letterSpacing: '0.4px'
+              }}
+            >
+              ▲ SOURCE
+            </div>
+          </foreignObject>
+        </g>
+      )}
+
+      {/* Target Highlight Glow & Badge when connected arrow is hovered */}
+      {isHoveredAsTarget && (
+        <g className="node-target-highlight" style={{ pointerEvents: 'none' }}>
+          <rect
+            x={-6}
+            y={-6}
+            width={width + 12}
+            height={height + 12}
+            rx={14}
+            fill="none"
+            stroke="#38BDF8"
+            strokeWidth={3}
+            filter="drop-shadow(0 0 10px rgba(56, 189, 248, 0.8))"
+          />
+          <foreignObject x={width / 2 - 42} y={-26} width={84} height={24}>
+            <div
+              style={{
+                background: '#0284C7',
+                color: '#FFFFFF',
+                borderRadius: '12px',
+                fontSize: '10px',
+                fontWeight: '700',
+                textAlign: 'center',
+                lineHeight: '20px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                letterSpacing: '0.4px'
+              }}
+            >
+              ▼ TARGET
+            </div>
+          </foreignObject>
+        </g>
+      )}
+
       {/* Magnetic Target Snap Glow while dragging an arrow */}
       {isTargeted && (
         <rect

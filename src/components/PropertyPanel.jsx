@@ -427,6 +427,7 @@ export default function PropertyPanel({
           </div>
 
           {/* Line Color & Width */}
+          {/* Line Color & Width */}
           <div className="prop-group">
             <div className="two-col-row">
               <div className="picker-item">
@@ -459,6 +460,29 @@ export default function PropertyPanel({
                 </select>
               </div>
             </div>
+
+            {/* Quick Distinguishable Connector Colors */}
+            <div className="quick-label-presets" style={{ marginTop: '8px' }}>
+              {[
+                { name: 'Sky', hex: '#38BDF8' },
+                { name: 'Emerald', hex: '#10B981' },
+                { name: 'Purple', hex: '#A855F7' },
+                { name: 'Amber', hex: '#F59E0B' },
+                { name: 'Rose', hex: '#F43F5E' },
+                { name: 'Slate', hex: '#94A3B8' }
+              ].map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  className={`preset-pill ${(selectedConnector.color || '#38BDF8').toLowerCase() === c.hex.toLowerCase() ? 'active' : ''}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => onUpdateConnector(selectedConnector.id, { color: c.hex })}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: c.hex }} />
+                  {c.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Line Style */}
@@ -474,6 +498,28 @@ export default function PropertyPanel({
               <option value="solid">Solid Arrow</option>
               <option value="dashed">Dashed Arrow</option>
             </select>
+          </div>
+
+          {/* Routing Track Lane / Spacing */}
+          <div className="prop-group">
+            <label className="prop-label">Routing Track (Lane)</label>
+            <div className="quick-label-presets">
+              {[
+                { label: 'Auto (Smart)', value: undefined },
+                { label: 'Lane 1 (48px)', value: 48 },
+                { label: 'Lane 2 (84px)', value: 84 },
+                { label: 'Lane 3 (120px)', value: 120 }
+              ].map((lane) => (
+                <button
+                  key={lane.label}
+                  type="button"
+                  className={`preset-pill ${selectedConnector.offset === lane.value || (lane.value === undefined && selectedConnector.offset === undefined) ? 'active' : ''}`}
+                  onClick={() => onUpdateConnector(selectedConnector.id, { offset: lane.value })}
+                >
+                  {lane.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Port attachment endpoints */}

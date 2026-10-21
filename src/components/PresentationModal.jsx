@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import FlowNode from './FlowNode';
 import FlowConnector from './FlowConnector';
+import { computeConnectorLanes } from '../utils/geometry';
 import { DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '../types/constants';
 
 export default function PresentationModal({
@@ -151,22 +152,27 @@ export default function PresentationModal({
 
           {/* Connectors Layer */}
           <g className="canvas-connectors-layer">
-            {(currentSlide.connectors || []).map((connector) => {
-              const fromNode = (currentSlide.nodes || []).find((n) => n.id === connector.fromId);
-              const toNode = (currentSlide.nodes || []).find((n) => n.id === connector.toId);
-              return (
-                <FlowConnector
-                  key={connector.id}
-                  connector={connector}
-                  fromNode={fromNode}
-                  toNode={toNode}
-                  isSelected={false}
-                  onSelect={() => {}}
-                  onUpdate={() => {}}
-                  onDelete={() => {}}
-                />
-              );
-            })}
+            {(() => {
+              const laneMap = computeConnectorLanes(currentSlide.connectors || [], currentSlide.nodes || []);
+              return (currentSlide.connectors || []).map((connector) => {
+                const fromNode = (currentSlide.nodes || []).find((n) => n.id === connector.fromId);
+                const toNode = (currentSlide.nodes || []).find((n) => n.id === connector.toId);
+                const laneOptions = laneMap.get(connector.id) || {};
+                return (
+                  <FlowConnector
+                    key={connector.id}
+                    connector={connector}
+                    fromNode={fromNode}
+                    toNode={toNode}
+                    options={laneOptions}
+                    isSelected={false}
+                    onSelect={() => {}}
+                    onUpdate={() => {}}
+                    onDelete={() => {}}
+                  />
+                );
+              });
+            })()}
           </g>
 
           {/* Nodes Layer */}

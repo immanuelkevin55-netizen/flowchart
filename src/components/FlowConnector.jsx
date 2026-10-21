@@ -11,7 +11,11 @@ export default function FlowConnector({
   fromNode,
   toNode,
   isSelected,
+  isHovered,
+  isDimmed,
+  options = {},
   onSelect,
+  onHover,
   onUpdate,
   onDelete,
   onStartDragEndpoint
@@ -35,8 +39,8 @@ export default function FlowConnector({
     return null;
   }
 
-  const pathD = generateConnectorPath(start, end, type, fromPort, toPort);
-  const mid = getConnectorMidpoint(start, end, type, fromPort, toPort);
+  const pathD = generateConnectorPath(start, end, type, fromPort, toPort, options);
+  const mid = getConnectorMidpoint(start, end, type, fromPort, toPort, options);
   const strokeDash = style === 'dashed' ? '6,4' : undefined;
 
   const handleLabelSubmit = () => {
@@ -44,31 +48,40 @@ export default function FlowConnector({
     onUpdate(id, { label: labelInput });
   };
 
+  const tooltipText = `${fromNode?.text || 'Start'} ➔ ${toNode?.text || 'Target'}`;
+
   return (
     <g
-      className={`flow-connector-group ${isSelected ? 'selected' : ''}`}
+      className={`flow-connector-group ${isSelected ? 'selected' : ''} ${isHovered ? 'hovered' : ''} ${isDimmed ? 'dimmed' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
         onSelect(id, e);
       }}
+      onMouseEnter={() => onHover && onHover(id)}
+      onMouseLeave={() => onHover && onHover(null)}
+      style={{
+        opacity: isDimmed ? 0.22 : 1,
+        transition: 'opacity 0.2s ease'
+      }}
     >
-      {/* Invisible wider hit-target line for effortless clicking */}
+      {/* Invisible wider hit-target line for effortless clicking and hovering */}
       <path
         d={pathD}
         fill="none"
         stroke="transparent"
-        strokeWidth={18}
+        strokeWidth={22}
         className="connector-hit-area"
       />
 
-      {/* Selected Halo Glow */}
-      {isSelected && (
+      {/* Selected or Hover Glow Halo */}
+      {(isSelected || isHovered) && (
         <path
           d={pathD}
           fill="none"
-          stroke="var(--accent-glow, #38BDF8)"
-          strokeWidth={width + 6}
-          strokeOpacity={0.45}
+          stroke={isSelected ? 'var(--accent-glow, #38BDF8)' : color}
+          strokeWidth={width + (isSelected ? 8 : 6)}
+          strokeOpacity={isSelected ? 0.6 : 0.4}
+          className="connector-glow-halo"
         />
       )}
 
@@ -77,11 +90,36 @@ export default function FlowConnector({
         d={pathD}
         fill="none"
         stroke={color}
-        strokeWidth={width}
+        strokeWidth={isHovered ? width + 1 : width}
         strokeDasharray={strokeDash}
         markerEnd={`url(#arrow-${color.replace('#', '')})`}
         className="flow-connector-path"
       />
+
+      {/* Animated Flow Dash when hovered or selected */}
+      {(isSelected || isHovered) && (
+        <path
+          d={pathD}
+          fill="none"
+          stroke="#FFFFFF"
+          strokeWidth={Math.max(1.5, width - 0.5)}
+          strokeDasharray="6 8"
+          strokeOpacity={0.85}
+          className="flow-connector-pulse-line"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
+
+      {/* Directional Chevron at midpoint if line is unlabelled */}
+      {!label && !isEditingLabel && !isSelected && (
+        <g
+          transform={`translate(${mid.x}, ${mid.y})`}
+          className="connector-flow-chevron"
+          style={{ pointerEvents: 'none', opacity: 0.7 }}
+        >
+          <circle cx={0} cy={0} r={4} fill={color} />
+        </g>
+      )}
 
       {/* When selected: Interactive Drag Handles at Start and End points */}
       {isSelected && onStartDragEndpoint && (
@@ -111,6 +149,38 @@ export default function FlowConnector({
             }}
             title="Drag to reconnect arrow tip anywhere"
           />
+        </g>
+      )}
+
+      {/* Interactive Floating Connection Tooltip on Hover */}
+      {isHovered && !isEditingLabel && (fromNode || toNode) && (
+        <g
+          transform={`translate(${mid.x}, ${mid.y - (label ? 24 : 16)})`}
+          className="connector-hover-tooltip"
+          style={{ pointerEvents: 'none' }}
+        >
+          <rect
+            x={-Math.max(38, (tooltipText.length * 6.5 + 20) / 2)}
+            y={-11}
+            width={Math.max(76, tooltipText.length * 6.5 + 20)}
+            height={22}
+            rx={11}
+            fill="#0F172A"
+            stroke={color}
+            strokeWidth={1.5}
+            filter="drop-shadow(0 2px 8px rgba(0,0,0,0.5))"
+          />
+          <text
+            x={0}
+            y={4}
+            textAnchor="middle"
+            fill="#F8FAFC"
+            fontSize="10px"
+            fontWeight="600"
+            letterSpacing="0.3px"
+          >
+            {tooltipText}
+          </text>
         </g>
       )}
 

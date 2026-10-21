@@ -1041,19 +1041,73 @@
   color: var(--danger);
 }
 
-/* Connector Lines */
 .flow-connector-group {
   cursor: pointer;
+  transition: opacity 0.2s ease;
 }
 
 .connector-hit-area {
   cursor: pointer;
 }
 
-.flow-connector-group:hover .flow-connector-path {
+.flow-connector-group:hover .flow-connector-path,
+.flow-connector-group.hovered .flow-connector-path {
   stroke-width: 3.5;
   filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.7));
   transition: stroke-width 0.15s ease;
+}
+
+.flow-connector-group.selected .flow-connector-path {
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9));
+}
+
+.connector-glow-halo {
+  pointer-events: none;
+  animation: glowPulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes glowPulse {
+  from { stroke-opacity: 0.35; }
+  to { stroke-opacity: 0.65; }
+}
+
+.flow-connector-pulse-line {
+  pointer-events: none;
+  animation: flowConnectorMarch 0.75s linear infinite;
+}
+
+@keyframes flowConnectorMarch {
+  from {
+    stroke-dashoffset: 28;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.connector-hover-tooltip {
+  pointer-events: none;
+  animation: tooltipFadeIn 0.15s ease;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.flow-node-group.source-active .flow-node-shape {
+  filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.8));
+}
+
+.flow-node-group.target-active .flow-node-shape {
+  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.8));
 }
 
 .connector-label-group {

@@ -1,7 +1,7 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import FlowNode from './FlowNode';
 import FlowConnector from './FlowConnector';
-import { snapToGrid, getConnectorEndpoints, getClosestPort, generateConnectorPath } from '../utils/geometry';
+import { snapToGrid, getConnectorEndpoints, getClosestPort, generateConnectorPath, computeConnectorLanes } from '../utils/geometry';
 import { DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '../types/constants';
 import { ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer, ArrowRight, LayoutTemplate, Sparkles } from 'lucide-react';
 
@@ -47,6 +47,19 @@ export default function Canvas({
   // Connector Endpoint Dragging state (dragging start or end of an existing arrow)
   // draggingEndpoint: { connId, endpoint: 'start' | 'end', mouseX, mouseY }
   const [draggingEndpoint, setDraggingEndpoint] = useState(null);
+
+  // Hovered connector for interactive path tracing & box illumination
+  const [hoveredConnectorId, setHoveredConnectorId] = useState(null);
+
+  // Dynamically calculate collision-free multi-track lanes across slide connectors
+  const connectorLanes = useMemo(
+    () => computeConnectorLanes(slide.connectors || [], slide.nodes || []),
+    [slide.connectors, slide.nodes]
+  );
+
+  const hoveredConn = (slide.connectors || []).find((c) => c.id === hoveredConnectorId);
+  const hoveredSourceId = hoveredConn?.fromId;
+  const hoveredTargetId = hoveredConn?.toId;
 
   // Node Resizing state: { nodeId, handle, startClientX, startClientY, startX, startY, startWidth, startHeight }
   const [resizingNode, setResizingNode] = useState(null);
@@ -792,14 +805,20 @@ export default function Canvas({
                 }
               }
 
+              const laneOptions = connectorLanes.get(connector.id) || {};
+
               return (
                 <FlowConnector
                   key={connector.id}
                   connector={renderedConn}
                   fromNode={fromNode}
                   toNode={toNode}
+                  options={laneOptions}
                   isSelected={selectedId === connector.id && selectedType === 'connector'}
+                  isHovered={hoveredConnectorId === connector.id}
+                  isDimmed={Boolean(hoveredConnectorId && hoveredConnectorId !== connector.id && selectedId !== connector.id)}
                   onSelect={(id) => onSelect(id, 'connector')}
+                  onHover={setHoveredConnectorId}
                   onUpdate={onUpdateConnector}
                   onDelete={onDeleteConnector}
                   onStartDragEndpoint={handleStartDragEndpoint}
@@ -875,6 +894,9 @@ export default function Canvas({
                   isSelected={selectedId === node.id && selectedType === 'node'}
                   isTargeted={hoveredPort.nodeId === node.id}
                   targetPort={hoveredPort.nodeId === node.id ? hoveredPort.portId : null}
+                  isHoveredAsSource={hoveredSourceId === node.id}
+                  isHoveredAsTarget={hoveredTargetId === node.id}
+                  isDimmed={Boolean(hoveredConnectorId && hoveredSourceId !== node.id && hoveredTargetId !== node.id)}
                   onSelect={(id) => onSelect(id, 'node')}
                   onUpdate={onUpdateNode}
                   onDelete={onDeleteNode}
