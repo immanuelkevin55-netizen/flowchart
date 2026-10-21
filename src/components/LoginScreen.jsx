@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
-import { Lock, User, Sparkles, ArrowRight, ShieldCheck, Presentation } from 'lucide-react';
+import { Lock, User, ArrowRight, Workflow } from 'lucide-react';
 
 export default function LoginScreen({ onLogin }) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!username.trim()) {
-      setError('Please enter a username');
+      setError('Please enter your username');
       return;
     }
-    if (!password.trim()) {
-      setError('Please enter a password');
+    if (!password) {
+      setError('Please enter your password');
       return;
     }
 
@@ -22,33 +22,28 @@ export default function LoginScreen({ onLogin }) {
     setError('');
 
     setTimeout(() => {
+      // Validate credentials
+      if (username.trim().toLowerCase() !== 'admin' || password !== 'tibl123') {
+        setError('Invalid username or password');
+        setIsLoading(false);
+        return;
+      }
+
       const userData = {
-        username: username.trim(),
-        role: username.toLowerCase() === 'admin' ? 'Administrator' : 'Editor',
+        username: 'admin',
+        role: 'Administrator',
         loginTime: Date.now()
       };
+
       try {
         localStorage.setItem('ppt_user_session', JSON.stringify(userData));
       } catch (err) {
         console.warn('Could not save session:', err);
       }
+
       setIsLoading(false);
       onLogin(userData);
-    }, 350);
-  };
-
-  const handleQuickDemoLogin = () => {
-    const demoData = {
-      username: 'admin',
-      role: 'Administrator',
-      loginTime: Date.now()
-    };
-    try {
-      localStorage.setItem('ppt_user_session', JSON.stringify(demoData));
-    } catch (err) {
-      console.warn('Could not save session:', err);
-    }
-    onLogin(demoData);
+    }, 300);
   };
 
   return (
@@ -57,14 +52,11 @@ export default function LoginScreen({ onLogin }) {
       
       <div className="login-card-container">
         {/* Brand Header */}
-        <div className="login-brand-header">
+        <div className="login-brand-header" style={{ marginBottom: '24px' }}>
           <div className="login-brand-icon">
-            <Presentation size={28} color="#38BDF8" />
+            <Workflow size={28} color="#38BDF8" />
           </div>
-          <h1 className="login-brand-title">PPT Generator Studio</h1>
-          <p className="login-brand-subtitle">
-            Sign in to design, auto-route, and export board-ready presentations
-          </p>
+          <h1 className="login-brand-title">Flowchart Generator</h1>
         </div>
 
         {/* Login Form */}
@@ -104,6 +96,7 @@ export default function LoginScreen({ onLogin }) {
             type="submit"
             className="login-submit-btn"
             disabled={isLoading}
+            style={{ marginTop: '8px' }}
           >
             {isLoading ? (
               <span>Signing in...</span>
@@ -115,27 +108,6 @@ export default function LoginScreen({ onLogin }) {
             )}
           </button>
         </form>
-
-        {/* Divider */}
-        <div className="login-divider">
-          <span>OR</span>
-        </div>
-
-        {/* Quick Demo One-Click Access */}
-        <button
-          type="button"
-          onClick={handleQuickDemoLogin}
-          className="login-demo-btn"
-        >
-          <Sparkles size={16} className="demo-sparkle-icon" />
-          <span>Quick 1-Click Demo Access</span>
-        </button>
-
-        {/* Demo Credentials Badge */}
-        <div className="login-demo-hint">
-          <ShieldCheck size={14} color="#10B981" />
-          <span>Demo credentials prefilled: <code>admin</code> / <code>admin123</code></span>
-        </div>
       </div>
     </div>
   );
