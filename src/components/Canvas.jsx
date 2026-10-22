@@ -25,6 +25,7 @@ export default function Canvas({
   onAddConnector,
   onUpdateSlide,
   onOpenTemplates,
+  onAlignMiddle,
   showGrid = true,
   gridSnap = true
 }) {
@@ -574,10 +575,19 @@ export default function Canvas({
     // 4. Group Dragging (Move all selected flowchart shapes together!)
     if (groupDragState) {
       groupDragState.hasDragged = true;
+      const primaryInit = groupDragState.initialPositions[groupDragState.primaryId];
       let dx = x - groupDragState.startMouseX;
       let dy = y - groupDragState.startMouseY;
 
-      if (gridSnap) {
+      if (gridSnap && primaryInit) {
+        // Absolute grid snapping: locks dragged box top/left onto exact 20px grid multiples!
+        const targetX = primaryInit.x + dx;
+        const targetY = primaryInit.y + dy;
+        const snappedX = snapToGrid(targetX, 20);
+        const snappedY = snapToGrid(targetY, 20);
+        dx = snappedX - primaryInit.x;
+        dy = snappedY - primaryInit.y;
+      } else if (gridSnap) {
         dx = snapToGrid(dx, 20);
         dy = snapToGrid(dy, 20);
       }
@@ -804,10 +814,22 @@ export default function Canvas({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* Multi-Selection Info Badge */}
+      {/* Multi-Selection Info Badge with Align Action */}
       {(selectedIds || []).length > 1 && (
         <div className="canvas-multiselect-badge">
-          <span>{(selectedIds || []).length} shapes selected — Drag any shape to move flowchart together</span>
+          <span>{(selectedIds || []).length} shapes selected</span>
+          <div className="canvas-multiselect-divider" />
+          <button
+            type="button"
+            className="canvas-multiselect-action-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAlignMiddle && onAlignMiddle();
+            }}
+            title="Align all selected shapes to exact same horizontal line (Alt + A)"
+          >
+            <span>✨ Align Middle Straight</span>
+          </button>
         </div>
       )}
 

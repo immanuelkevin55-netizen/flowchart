@@ -285,10 +285,10 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   // 5. RIGHT to LEFT (Standard forward horizontal flow or backward feedback)
   else if (fromPort === 'right' && toPort === 'left') {
     if (x2 >= x1 + minMargin * 2) {
-      if (Math.abs(y1 - y2) <= 4) {
+      if (Math.abs(y1 - y2) <= 14) {
         rawPoints = [
           { x: x1, y: y1 },
-          { x: x2, y: y2 }
+          { x: x2, y: y1 }
         ];
       } else {
         const midX = (x1 + x2) / 2;
@@ -320,10 +320,10 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   // 6. LEFT to RIGHT (Opposite horizontal flow or backward feedback)
   else if (fromPort === 'left' && toPort === 'right') {
     if (x2 <= x1 - minMargin * 2) {
-      if (Math.abs(y1 - y2) <= 4) {
+      if (Math.abs(y1 - y2) <= 14) {
         rawPoints = [
           { x: x1, y: y1 },
-          { x: x2, y: y2 }
+          { x: x2, y: y1 }
         ];
       } else {
         const midX = (x1 + x2) / 2;
@@ -355,10 +355,10 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   // 7. BOTTOM to TOP (Downward vertical flow or upward feedback)
   else if (fromPort === 'bottom' && toPort === 'top') {
     if (y2 >= y1 + minMargin * 2) {
-      if (Math.abs(x1 - x2) <= 4) {
+      if (Math.abs(x1 - x2) <= 14) {
         rawPoints = [
           { x: x1, y: y1 },
-          { x: x2, y: y2 }
+          { x: x1, y: y2 }
         ];
       } else {
         const midY = (y1 + y2) / 2;
@@ -391,10 +391,10 @@ export function getOrthogonalPoints(start, end, fromPort = 'right', toPort = 'le
   // 8. TOP to BOTTOM (Upward vertical flow or downward feedback)
   else if (fromPort === 'top' && toPort === 'bottom') {
     if (y2 <= y1 - minMargin * 2) {
-      if (Math.abs(x1 - x2) <= 4) {
+      if (Math.abs(x1 - x2) <= 14) {
         rawPoints = [
           { x: x1, y: y1 },
-          { x: x2, y: y2 }
+          { x: x1, y: y2 }
         ];
       } else {
         const midY = (y1 + y2) / 2;

@@ -9,6 +9,7 @@ import TemplatesModal from './components/TemplatesModal';
 import PresentationModal from './components/PresentationModal';
 import LoginScreen from './components/LoginScreen';
 import { THEMES, SHAPE_TYPES, DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from './types/constants';
+import { snapToGrid } from './utils/geometry';
 import { TEMPLATES } from './utils/templates';
 import { exportToPowerPoint } from './utils/pptxExporter';
 import './App.css';
@@ -322,12 +323,15 @@ export default function App() {
             return n;
           })
         }));
+      } else if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        handleAlignMiddle();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, selectedType, selectedIds, activeSlide.nodes, handleUndo, handleRedo, handleSelectMultiple]);
+  }, [selectedId, selectedType, selectedIds, activeSlide.nodes, handleUndo, handleRedo, handleSelectMultiple, handleAlignMiddle]);
 
   // Update current slide helper
   const updateCurrentSlide = (updater) => {
@@ -449,12 +453,29 @@ export default function App() {
       textColor = activeTheme.terminator.textColor;
     }
 
+    // Calculate smart clean grid position without random jitter
+    const currentNodes = activeSlide.nodes || [];
+    let initialX = 700;
+    let initialY = 360;
+
+    if (currentNodes.length > 0) {
+      // Find rightmost node to place next step sequentially along the exact same Y baseline
+      const rightmost = currentNodes.reduce((prev, curr) => (curr.x > prev.x ? curr : prev), currentNodes[0]);
+      if (rightmost && rightmost.x + (rightmost.width || defaultWidth) + defaultWidth + 40 < DEFAULT_CANVAS_WIDTH - 60) {
+        initialX = snapToGrid(rightmost.x + (rightmost.width || defaultWidth) + 60, 20);
+        initialY = snapToGrid(rightmost.y, 20); // Exact same Y baseline as neighbor!
+      } else {
+        initialX = snapToGrid(700 + (currentNodes.length % 5) * 40, 20);
+        initialY = 360;
+      }
+    }
+
     const newNode = {
       id: `node-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       text: shapeType === SHAPE_TYPES.DECISION ? 'Decision?' : 'New Step',
       shape: shapeType,
-      x: 700 + Math.floor(Math.random() * 40 - 20),
-      y: 350 + Math.floor(Math.random() * 40 - 20),
+      x: initialX,
+      y: initialY,
       width: defaultWidth,
       height: defaultHeight,
       fill,
@@ -540,6 +561,41 @@ export default function App() {
     handleSelectMultiple(newlyCreatedIds, 'node');
     showToast(`Duplicated ${newNodes.length} shapes`, 'success');
   };
+
+  // Align selected nodes (or all nodes) to the exact same vertical center line
+  const handleAlignMiddle = useCallback(() => {
+    const slideNodes = activeSlide.nodes || [];
+    if (slideNodes.length < 2) return;
+
+    const idsToAlign = (selectedType === 'node' && selectedIds.length > 1)
+      ? selectedIds
+      : slideNodes.map((n) => n.id);
+
+    const targetNodes = slideNodes.filter((n) => idsToAlign.includes(n.id));
+    if (targetNodes.length < 2) return;
+
+    // Calculate common center Y snapped to grid
+    const avgCenterY = snapToGrid(
+      targetNodes.reduce((sum, n) => sum + (n.y + (n.height || 80) / 2), 0) / targetNodes.length,
+      20
+    );
+
+    updateCurrentSlide((s) => ({
+      ...s,
+      nodes: (s.nodes || []).map((n) => {
+        if (idsToAlign.includes(n.id)) {
+          const h = n.height || 80;
+          return {
+            ...n,
+            y: Math.round(avgCenterY - h / 2)
+          };
+        }
+        return n;
+      })
+    }));
+
+    showToast(`Aligned ${targetNodes.length} boxes straight to the exact same line`, 'success');
+  }, [activeSlide.nodes, selectedType, selectedIds]);
 
   // 3. Connector Management
   const handleAddConnector = (connectorData) => {
@@ -951,6 +1007,7 @@ export default function App() {
             onAddConnector={handleAddConnector}
             onUpdateSlide={(updates) => updateCurrentSlide(updates)}
             onOpenTemplates={() => setIsTemplatesOpen(true)}
+            onAlignMiddle={handleAlignMiddle}
             showGrid={showGrid}
             gridSnap={gridSnap}
           />
