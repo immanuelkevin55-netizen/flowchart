@@ -270,26 +270,58 @@ export default function App() {
         e.preventDefault();
         setIsPresenting(true);
       } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-        if (selectedType === 'node' && (selectedIds.length > 0 || selectedId)) {
-          e.preventDefault();
-          const idsToNudge = selectedIds.length > 0 ? selectedIds : [selectedId];
-          const step = e.shiftKey ? 20 : 5;
-          const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-          const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-          updateCurrentSlide((s) => ({
-            ...s,
-            nodes: (s.nodes || []).map((n) => {
-              if (idsToNudge.includes(n.id)) {
-                return {
-                  ...n,
-                  x: Math.max(20, Math.min(DEFAULT_CANVAS_WIDTH - n.width - 20, n.x + dx)),
-                  y: Math.max(140, Math.min(DEFAULT_CANVAS_HEIGHT - n.height - 20, n.y + dy))
-                };
-              }
-              return n;
-            })
-          }));
-        }
+        if (isPresenting) return;
+        e.preventDefault();
+
+        const slideNodes = activeSlide.nodes || [];
+        if (slideNodes.length === 0) return;
+
+        // If specific nodes are selected, move them. Otherwise, move the entire flowchart!
+        const idsToNudge = (selectedType === 'node' && (selectedIds.length > 0 || selectedId))
+          ? (selectedIds.length > 0 ? selectedIds : [selectedId])
+          : slideNodes.map((n) => n.id);
+
+        const step = e.shiftKey ? 25 : 10;
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+
+        // Boundary clamping across all moving shapes so group spacing stays intact
+        const targetNodes = slideNodes.filter((n) => idsToNudge.includes(n.id));
+        let minAllowedDx = -Infinity;
+        let maxAllowedDx = Infinity;
+        let minAllowedDy = -Infinity;
+        let maxAllowedDy = Infinity;
+
+        targetNodes.forEach((node) => {
+          const minDx = 20 - node.x;
+          const maxDx = (DEFAULT_CANVAS_WIDTH - (node.width || 180) - 20) - node.x;
+          const minDy = 140 - node.y;
+          const maxDy = (DEFAULT_CANVAS_HEIGHT - (node.height || 80) - 20) - node.y;
+
+          if (minDx > minAllowedDx) minAllowedDx = minDx;
+          if (maxDx < maxAllowedDx) maxAllowedDx = maxDx;
+          if (minDy > minAllowedDy) minAllowedDy = minDy;
+          if (maxDy < maxAllowedDy) maxAllowedDy = maxDy;
+        });
+
+        const clampedDx = Math.max(minAllowedDx, Math.min(maxAllowedDx, dx));
+        const clampedDy = Math.max(minAllowedDy, Math.min(maxAllowedDy, dy));
+
+        if (clampedDx === 0 && clampedDy === 0) return;
+
+        updateCurrentSlide((s) => ({
+          ...s,
+          nodes: (s.nodes || []).map((n) => {
+            if (idsToNudge.includes(n.id)) {
+              return {
+                ...n,
+                x: Math.round(n.x + clampedDx),
+                y: Math.round(n.y + clampedDy)
+              };
+            }
+            return n;
+          })
+        }));
       }
     };
 
