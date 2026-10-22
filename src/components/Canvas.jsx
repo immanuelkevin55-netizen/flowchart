@@ -107,6 +107,13 @@ export default function Canvas({
   const hoveredSourceId = hoveredConn?.fromId;
   const hoveredTargetId = hoveredConn?.toId;
 
+  // Ensure stale hovered connector IDs are automatically cleared when connectors change
+  useEffect(() => {
+    if (hoveredConnectorId && !(slide.connectors || []).some((c) => c.id === hoveredConnectorId)) {
+      setHoveredConnectorId(null);
+    }
+  }, [slide.connectors, hoveredConnectorId]);
+
   // Node Resizing state: { nodeId, handle, startClientX, startClientY, startX, startY, startWidth, startHeight }
   const [resizingNode, setResizingNode] = useState(null);
 
@@ -950,6 +957,7 @@ export default function Canvas({
       onMouseDown={handleCanvasMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onPointerLeave={() => setHoveredConnectorId(null)}
     >
       {/* Multi-Selection Info Badge with Align Action */}
       {(selectedIds || []).length > 1 && (
@@ -1247,7 +1255,6 @@ export default function Canvas({
                   options={laneOptions}
                   isSelected={selectedId === connector.id && selectedType === 'connector'}
                   isHovered={hoveredConnectorId === connector.id}
-                  isDimmed={Boolean(hoveredConnectorId && hoveredConnectorId !== connector.id && selectedId !== connector.id)}
                   onSelect={(id) => onSelect(id, 'connector')}
                   onHover={setHoveredConnectorId}
                   onUpdate={onUpdateConnector}
@@ -1476,7 +1483,6 @@ export default function Canvas({
                     targetPort={hoveredPort.nodeId === node.id ? hoveredPort.portId : null}
                     isHoveredAsSource={hoveredSourceId === node.id}
                     isHoveredAsTarget={hoveredTargetId === node.id}
-                    isDimmed={Boolean(hoveredConnectorId && hoveredSourceId !== node.id && hoveredTargetId !== node.id)}
                     onSelect={(id) => onSelect(id, 'node')}
                     onUpdate={onUpdateNode}
                     onDelete={onDeleteNode}

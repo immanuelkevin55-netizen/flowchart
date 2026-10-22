@@ -259,7 +259,7 @@ export default function FlowNode({
       className={`flow-node-group ${isSelected ? 'selected' : ''} ${isHoveredAsSource ? 'source-active' : ''} ${isHoveredAsTarget ? 'target-active' : ''}`}
       transform={`translate(${x}, ${y})`}
       style={{
-        opacity: isDimmed ? 0.35 : (opacity !== undefined ? opacity / 100 : 1),
+        opacity: opacity !== undefined ? opacity / 100 : 1,
         transition: 'opacity 0.2s ease'
       }}
       onClick={(e) => {

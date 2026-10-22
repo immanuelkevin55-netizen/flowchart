@@ -61,7 +61,7 @@ export default function FlowConnector({
       onMouseEnter={() => onHover && onHover(id)}
       onMouseLeave={() => onHover && onHover(null)}
       style={{
-        opacity: isDimmed ? 0.22 : 1,
+        opacity: 1,
         transition: 'opacity 0.2s ease'
       }}
     >
