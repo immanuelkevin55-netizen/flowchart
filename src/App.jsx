@@ -136,6 +136,19 @@ export default function App() {
   // Selection state
   const [selectedId, setSelectedId] = useState(null);
   const [selectedType, setSelectedType] = useState(null); // 'node' | 'connector' | null
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const handleSelect = useCallback((id, type) => {
+    setSelectedId(id);
+    setSelectedType(type);
+    setSelectedIds(id ? [id] : []);
+  }, []);
+
+  const handleSelectMultiple = useCallback((ids, type = 'node') => {
+    setSelectedIds(ids || []);
+    setSelectedId(ids && ids.length > 0 ? ids[0] : null);
+    setSelectedType(ids && ids.length > 0 ? type : null);
+  }, []);
 
   // Canvas Settings
   const [showGrid, setShowGrid] = useState(true);
@@ -214,20 +227,34 @@ export default function App() {
       // Ignore if user is currently typing in an input or textarea
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        const allNodeIds = (activeSlide.nodes || []).map((n) => n.id);
+        if (allNodeIds.length > 0) {
+          handleSelectMultiple(allNodeIds, 'node');
+          showToast(`Selected all ${allNodeIds.length} flowchart shapes`, 'info');
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) handleRedo();
         else handleUndo();
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault();
         handleRedo();
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedIds.length > 0 || selectedId)) {
         e.preventDefault();
-        if (selectedType === 'node') handleDeleteNode(selectedId);
-        if (selectedType === 'connector') handleDeleteConnector(selectedId);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedId && selectedType === 'node') {
+        if (selectedType === 'node') {
+          const idsToDelete = selectedIds.length > 0 ? selectedIds : [selectedId];
+          handleDeleteMultipleNodes(idsToDelete);
+        } else if (selectedType === 'connector' && selectedId) {
+          handleDeleteConnector(selectedId);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedType === 'node') {
         e.preventDefault();
-        handleDuplicateNode(selectedId);
+        const idsToDuplicate = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
+        if (idsToDuplicate.length > 0) {
+          handleDuplicateMultipleNodes(idsToDuplicate);
+        }
       } else if (e.key === 'v' || e.key === 'V') {
         setActiveTool('select');
       } else if (e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A') {
@@ -242,12 +269,33 @@ export default function App() {
       } else if (e.key === 'F5') {
         e.preventDefault();
         setIsPresenting(true);
+      } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        if (selectedType === 'node' && (selectedIds.length > 0 || selectedId)) {
+          e.preventDefault();
+          const idsToNudge = selectedIds.length > 0 ? selectedIds : [selectedId];
+          const step = e.shiftKey ? 20 : 5;
+          const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+          const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+          updateCurrentSlide((s) => ({
+            ...s,
+            nodes: (s.nodes || []).map((n) => {
+              if (idsToNudge.includes(n.id)) {
+                return {
+                  ...n,
+                  x: Math.max(20, Math.min(DEFAULT_CANVAS_WIDTH - n.width - 20, n.x + dx)),
+                  y: Math.max(140, Math.min(DEFAULT_CANVAS_HEIGHT - n.height - 20, n.y + dy))
+                };
+              }
+              return n;
+            })
+          }));
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, selectedType, handleUndo, handleRedo]);
+  }, [selectedId, selectedType, selectedIds, activeSlide.nodes, handleUndo, handleRedo, handleSelectMultiple]);
 
   // Update current slide helper
   const updateCurrentSlide = (updater) => {
@@ -404,34 +452,61 @@ export default function App() {
   };
 
   const handleDeleteNode = (nodeId) => {
+    handleDeleteMultipleNodes([nodeId]);
+  };
+
+  const handleDeleteMultipleNodes = (nodeIds) => {
+    if (!nodeIds || nodeIds.length === 0) return;
+    const idSet = new Set(nodeIds);
     updateCurrentSlide((s) => ({
       ...s,
-      nodes: (s.nodes || []).filter((n) => n.id !== nodeId),
-      // Also remove all connectors touching this node
-      connectors: (s.connectors || []).filter((c) => c.fromId !== nodeId && c.toId !== nodeId)
+      nodes: (s.nodes || []).filter((n) => !idSet.has(n.id)),
+      // Also remove all connectors touching any deleted node
+      connectors: (s.connectors || []).filter((c) => !idSet.has(c.fromId) && !idSet.has(c.toId))
     }));
-    setSelectedId(null);
-    setSelectedType(null);
+    handleSelect(null, null);
+    showToast(`Deleted ${nodeIds.length} shapes`, 'info');
   };
 
   const handleDuplicateNode = (nodeId) => {
-    const node = (activeSlide.nodes || []).find((n) => n.id === nodeId);
-    if (!node) return;
+    handleDuplicateMultipleNodes([nodeId]);
+  };
 
-    const cloned = {
-      ...JSON.parse(JSON.stringify(node)),
-      id: `node-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      x: node.x + 40,
-      y: node.y + 40
-    };
+  const handleDuplicateMultipleNodes = (nodeIds) => {
+    if (!nodeIds || nodeIds.length === 0) return;
+    const nodes = (activeSlide.nodes || []).filter((n) => nodeIds.includes(n.id));
+    if (nodes.length === 0) return;
+
+    const idMap = {};
+    const newNodes = nodes.map((node) => {
+      const newId = `node-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      idMap[node.id] = newId;
+      return {
+        ...JSON.parse(JSON.stringify(node)),
+        id: newId,
+        x: node.x + 40,
+        y: node.y + 40
+      };
+    });
+
+    const internalConnectors = (activeSlide.connectors || []).filter(
+      (c) => idMap[c.fromId] && idMap[c.toId]
+    ).map((c) => ({
+      ...JSON.parse(JSON.stringify(c)),
+      id: `conn-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      fromId: idMap[c.fromId],
+      toId: idMap[c.toId]
+    }));
 
     updateCurrentSlide((s) => ({
       ...s,
-      nodes: [...s.nodes, cloned]
+      nodes: [...s.nodes, ...newNodes],
+      connectors: [...s.connectors, ...internalConnectors]
     }));
 
-    setSelectedId(cloned.id);
-    setSelectedType('node');
+    const newlyCreatedIds = newNodes.map((n) => n.id);
+    handleSelectMultiple(newlyCreatedIds, 'node');
+    showToast(`Duplicated ${newNodes.length} shapes`, 'success');
   };
 
   // 3. Connector Management
@@ -829,14 +904,13 @@ export default function App() {
             theme={activeTheme}
             selectedId={selectedId}
             selectedType={selectedType}
+            selectedIds={selectedIds}
+            onSelect={handleSelect}
+            onSelectMultiple={handleSelectMultiple}
             activeTool={activeTool}
             setActiveTool={setActiveTool}
             isLeftSidebarOpen={isLeftSidebarOpen}
             isRightSidebarOpen={isRightSidebarOpen}
-            onSelect={(id, type) => {
-              setSelectedId(id);
-              setSelectedType(type);
-            }}
             onUpdateNode={handleUpdateNode}
             onUpdateConnector={handleUpdateConnector}
             onDeleteNode={handleDeleteNode}

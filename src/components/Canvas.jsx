@@ -10,6 +10,8 @@ export default function Canvas({
   theme,
   selectedId,
   selectedType, // 'node' | 'connector' | null
+  selectedIds = [],
+  onSelectMultiple,
   activeTool = 'select', // 'select' | 'connector'
   setActiveTool,
   isLeftSidebarOpen = true,
@@ -66,6 +68,12 @@ export default function Canvas({
   // Node Dragging state
   const [draggingNode, setDraggingNode] = useState(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Marquee Selection state: { startX, startY, currentX, currentY }
+  const [selectionBox, setSelectionBox] = useState(null);
+
+  // Group Dragging state: { primaryId, startMouseX, startMouseY, initialPositions, hasDragged, wasMulti, shiftKey }
+  const [groupDragState, setGroupDragState] = useState(null);
 
   // Connector drawing state
   // connecting: { fromId, fromPort, startX, startY, mouseX, mouseY }
@@ -252,10 +260,10 @@ export default function Canvas({
     };
   }, [fitToScreen]);
 
-  // Mouse wheel zoom (Draw.io style zoom-to-cursor)
-  const handleWheel = (e) => {
+  // Mouse wheel zoom & pan (Draw.io style zoom-to-cursor)
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
@@ -275,7 +283,6 @@ export default function Canvas({
       });
     } else if (e.shiftKey) {
       // Shift + Wheel = Horizontal Scroll
-      e.preventDefault();
       setPan((p) => ({
         ...p,
         x: p.x - e.deltaY * 0.85
@@ -287,15 +294,29 @@ export default function Canvas({
         y: p.y - e.deltaY * 0.85
       }));
     }
-  };
+  }, []);
 
-  // Canvas Mouse Down: Start Pan, or Start Freeform Arrow if Arrow Tool active
+  // Attach non-passive wheel event listener so e.preventDefault() works
+  // and completely stops browser window zoom during Ctrl+Wheel / pinch gestures
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
+
+  // Canvas Mouse Down: Start Pan, or Start Freeform Arrow if Arrow Tool active, or Start Marquee Box Selection
   const handleCanvasMouseDown = (e) => {
     // If middle click or space key held, start panning
     if (e.button === 1 || isSpacePressed) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-      onSelect(null, null);
+      if (onSelectMultiple) onSelectMultiple([], null);
+      else onSelect(null, null);
       return;
     }
 
@@ -316,12 +337,26 @@ export default function Canvas({
       return;
     }
 
-    if (e.target.classList.contains('canvas-background-rect')) {
-      onSelect(null, null);
+    // Start Marquee Box Selection when clicking empty canvas surface
+    const isBackground = e.target.classList.contains('canvas-background-rect') ||
+                         e.target.classList.contains('slide-canvas-svg') ||
+                         e.target.classList.contains('canvas-viewport');
+
+    if (isBackground) {
+      if (!e.shiftKey) {
+        if (onSelectMultiple) onSelectMultiple([], null);
+        else onSelect(null, null);
+      }
+      setSelectionBox({
+        startX: x,
+        startY: y,
+        currentX: x,
+        currentY: y
+      });
     }
   };
 
-  // Node Drag Start
+  // Node Drag Start (Single or Multi-select Group Drag)
   const handleNodeMouseDown = (nodeId, e) => {
     e.stopPropagation();
 
@@ -334,14 +369,51 @@ export default function Canvas({
       return;
     }
 
-    onSelect(nodeId, 'node');
-
-    const node = slide.nodes.find((n) => n.id === nodeId);
-    if (!node) return;
-
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
-    setDraggingNode(nodeId);
-    setDragOffset({ x: x - node.x, y: y - node.y });
+
+    const currentSelectedIds = selectedIds && selectedIds.length > 0
+      ? selectedIds
+      : (selectedId ? [selectedId] : []);
+
+    let updatedSelectedIds;
+
+    if (e.shiftKey) {
+      if (currentSelectedIds.includes(nodeId)) {
+        updatedSelectedIds = currentSelectedIds.filter((id) => id !== nodeId);
+      } else {
+        updatedSelectedIds = [...currentSelectedIds, nodeId];
+      }
+    } else {
+      // If the clicked node is already part of a multi-selection, keep the group intact for group dragging!
+      if (currentSelectedIds.includes(nodeId) && currentSelectedIds.length > 1) {
+        updatedSelectedIds = currentSelectedIds;
+      } else {
+        updatedSelectedIds = [nodeId];
+      }
+    }
+
+    if (onSelectMultiple) {
+      onSelectMultiple(updatedSelectedIds, updatedSelectedIds.length > 0 ? 'node' : null);
+    } else {
+      onSelect(nodeId, 'node');
+    }
+
+    // Set up group dragging for ALL nodes in the active selection
+    const activeNodes = (slide.nodes || []).filter((n) => updatedSelectedIds.includes(n.id));
+    const initPositions = {};
+    activeNodes.forEach((n) => {
+      initPositions[n.id] = { x: n.x, y: n.y, width: n.width, height: n.height };
+    });
+
+    setGroupDragState({
+      primaryId: nodeId,
+      startMouseX: x,
+      startMouseY: y,
+      initialPositions: initPositions,
+      hasDragged: false,
+      shiftKey: e.shiftKey,
+      wasMulti: currentSelectedIds.includes(nodeId) && currentSelectedIds.length > 1
+    });
   };
 
   // Start Drawing Connector from port or quick-arrow button
@@ -412,7 +484,7 @@ export default function Canvas({
 
   // Mouse Move
   const handleMouseMove = (e) => {
-    // Panning
+    // 1. Panning
     if (isPanning) {
       setPan({
         x: e.clientX - panStart.x,
@@ -423,7 +495,36 @@ export default function Canvas({
 
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
 
-    // Resizing Node with on-canvas handles
+    // 2. Marquee Selection Box
+    if (selectionBox) {
+      const newBox = { ...selectionBox, currentX: x, currentY: y };
+      setSelectionBox(newBox);
+
+      const bx = Math.min(newBox.startX, x);
+      const by = Math.min(newBox.startY, y);
+      const bw = Math.abs(x - newBox.startX);
+      const bh = Math.abs(y - newBox.startY);
+
+      if (bw > 6 || bh > 6) {
+        const intersecting = (slide.nodes || [])
+          .filter((n) => {
+            return (
+              n.x + n.width >= bx &&
+              n.x <= bx + bw &&
+              n.y + n.height >= by &&
+              n.y <= by + bh
+            );
+          })
+          .map((n) => n.id);
+
+        if (onSelectMultiple) {
+          onSelectMultiple(intersecting, intersecting.length > 0 ? 'node' : null);
+        }
+      }
+      return;
+    }
+
+    // 3. Resizing Node with on-canvas handles
     if (resizingNode) {
       const dx = (e.clientX - resizingNode.startClientX) / zoom;
       const dy = (e.clientY - resizingNode.startClientY) / zoom;
@@ -470,7 +571,57 @@ export default function Canvas({
       return;
     }
 
-    // Dragging Node
+    // 4. Group Dragging (Move all selected flowchart shapes together!)
+    if (groupDragState) {
+      groupDragState.hasDragged = true;
+      let dx = x - groupDragState.startMouseX;
+      let dy = y - groupDragState.startMouseY;
+
+      if (gridSnap) {
+        dx = snapToGrid(dx, 20);
+        dy = snapToGrid(dy, 20);
+      }
+
+      // Constrain within slide boundaries
+      const nodeIds = Object.keys(groupDragState.initialPositions);
+      let minAllowedDx = -Infinity;
+      let maxAllowedDx = Infinity;
+      let minAllowedDy = -Infinity;
+      let maxAllowedDy = Infinity;
+
+      nodeIds.forEach((id) => {
+        const init = groupDragState.initialPositions[id];
+        if (init) {
+          const minDx = 20 - init.x;
+          const maxDx = (DEFAULT_CANVAS_WIDTH - init.width - 20) - init.x;
+          const minDy = 140 - init.y;
+          const maxDy = (DEFAULT_CANVAS_HEIGHT - init.height - 20) - init.y;
+
+          if (minDx > minAllowedDx) minAllowedDx = minDx;
+          if (maxDx < maxAllowedDx) maxAllowedDx = maxDx;
+          if (minDy > minAllowedDy) minAllowedDy = minDy;
+          if (maxDy < maxAllowedDy) maxAllowedDy = maxDy;
+        }
+      });
+
+      const clampedDx = Math.max(minAllowedDx, Math.min(maxAllowedDx, dx));
+      const clampedDy = Math.max(minAllowedDy, Math.min(maxAllowedDy, dy));
+
+      const updatedNodes = (slide.nodes || []).map((n) => {
+        const init = groupDragState.initialPositions[n.id];
+        if (!init) return n;
+        return {
+          ...n,
+          x: Math.round(init.x + clampedDx),
+          y: Math.round(init.y + clampedDy)
+        };
+      });
+
+      onUpdateSlide && onUpdateSlide({ nodes: updatedNodes });
+      return;
+    }
+
+    // 5. Dragging single node (fallback)
     if (draggingNode) {
       let newX = x - dragOffset.x;
       let newY = y - dragOffset.y;
@@ -503,10 +654,23 @@ export default function Canvas({
     }
   };
 
-  // Mouse Up: Complete Arrow Connection or Endpoint Drag
+  // Mouse Up: Complete Arrow Connection, Endpoint Drag, or Selection Box
   const handleMouseUp = (e) => {
     if (isPanning) {
       setIsPanning(false);
+    }
+
+    if (selectionBox) {
+      setSelectionBox(null);
+    }
+
+    if (groupDragState) {
+      if (!groupDragState.hasDragged && groupDragState.wasMulti && !groupDragState.shiftKey) {
+        if (onSelectMultiple) {
+          onSelectMultiple([groupDragState.primaryId], 'node');
+        }
+      }
+      setGroupDragState(null);
     }
 
     if (draggingNode) {
@@ -636,11 +800,17 @@ export default function Canvas({
     <div
       ref={containerRef}
       className={`canvas-viewport ${isSpacePressed ? 'is-space-pressed' : ''} ${isPanning ? 'is-panning' : ''} ${activeTool === 'connector' ? 'tool-connector-active' : ''} ${(connecting || draggingEndpoint) ? 'is-connecting' : ''}`}
-      onWheel={handleWheel}
       onMouseDown={handleCanvasMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
+      {/* Multi-Selection Info Badge */}
+      {(selectedIds || []).length > 1 && (
+        <div className="canvas-multiselect-badge">
+          <span>{(selectedIds || []).length} shapes selected — Drag any shape to move flowchart together</span>
+        </div>
+      )}
+
       {/* Tool Selection Bar (Top Left of Canvas) */}
       <div className={`canvas-tool-selector-overlay ${!isLeftSidebarOpen ? 'shifted-for-sidebar' : ''}`}>
         <button
@@ -703,7 +873,7 @@ export default function Canvas({
 
       {/* The 16:9 Presentation Stage */}
       <div
-        className={`canvas-transform-wrapper ${(isPanning || draggingNode || connecting || draggingEndpoint || resizingNode) ? 'is-dragging' : 'smooth-adapt'}`}
+        className={`canvas-transform-wrapper ${(isPanning || draggingNode || connecting || draggingEndpoint || resizingNode || groupDragState || selectionBox) ? 'is-dragging' : 'smooth-adapt'}`}
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           transformOrigin: '0 0'
@@ -967,35 +1137,59 @@ export default function Canvas({
             )}
           </g>
 
+          {/* Marquee Selection Rectangle */}
+          {selectionBox && (
+            <rect
+              x={Math.min(selectionBox.startX, selectionBox.currentX)}
+              y={Math.min(selectionBox.startY, selectionBox.currentY)}
+              width={Math.abs(selectionBox.currentX - selectionBox.startX)}
+              height={Math.abs(selectionBox.currentY - selectionBox.startY)}
+              fill="rgba(56, 189, 248, 0.12)"
+              stroke="var(--brand-primary, #38BDF8)"
+              strokeWidth={1.5}
+              strokeDasharray="4,4"
+              rx={3}
+              pointerEvents="none"
+            />
+          )}
+
           {/* Nodes Layer */}
           <g className="canvas-nodes-layer">
-            {(slide.nodes || []).map((node) => (
-              <g
-                key={node.id}
-                onMouseDown={(e) => handleNodeMouseDown(node.id, e)}
-              >
-                <FlowNode
-                  node={node}
-                  isSelected={selectedId === node.id && selectedType === 'node'}
-                  isTargeted={hoveredPort.nodeId === node.id}
-                  targetPort={hoveredPort.nodeId === node.id ? hoveredPort.portId : null}
-                  isHoveredAsSource={hoveredSourceId === node.id}
-                  isHoveredAsTarget={hoveredTargetId === node.id}
-                  isDimmed={Boolean(hoveredConnectorId && hoveredSourceId !== node.id && hoveredTargetId !== node.id)}
-                  onSelect={(id) => onSelect(id, 'node')}
-                  onUpdate={onUpdateNode}
-                  onDelete={onDeleteNode}
-                  onDuplicate={onDuplicateNode}
-                  onStartConnect={handleStartConnect}
-                  onConnectPortHover={(nodeId, portId) =>
-                    setHoveredPort({ nodeId, portId })
-                  }
-                  zoom={zoom}
-                  gridSnap={gridSnap}
-                  onStartResize={handleStartResize}
-                />
-              </g>
-            ))}
+            {(slide.nodes || []).map((node) => {
+              const currentIds = selectedIds && selectedIds.length > 0
+                ? selectedIds
+                : (selectedId ? [selectedId] : []);
+              const isSelected = currentIds.includes(node.id) && selectedType === 'node';
+              const isMulti = currentIds.length > 1;
+
+              return (
+                <g
+                  key={node.id}
+                  onMouseDown={(e) => handleNodeMouseDown(node.id, e)}
+                >
+                  <FlowNode
+                    node={node}
+                    isSelected={isSelected}
+                    isTargeted={hoveredPort.nodeId === node.id}
+                    targetPort={hoveredPort.nodeId === node.id ? hoveredPort.portId : null}
+                    isHoveredAsSource={hoveredSourceId === node.id}
+                    isHoveredAsTarget={hoveredTargetId === node.id}
+                    isDimmed={Boolean(hoveredConnectorId && hoveredSourceId !== node.id && hoveredTargetId !== node.id)}
+                    onSelect={(id) => onSelect(id, 'node')}
+                    onUpdate={onUpdateNode}
+                    onDelete={onDeleteNode}
+                    onDuplicate={onDuplicateNode}
+                    onStartConnect={handleStartConnect}
+                    onConnectPortHover={(nodeId, portId) =>
+                      setHoveredPort({ nodeId, portId })
+                    }
+                    zoom={zoom}
+                    gridSnap={gridSnap}
+                    onStartResize={isMulti ? null : handleStartResize}
+                  />
+                </g>
+              );
+            })}
           </g>
 
           {/* Empty Slide Guide Overlay */}

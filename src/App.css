@@ -877,6 +877,37 @@
 }
 
 /* Canvas Floating Controls (Draw.io style) */
+/* Multi-Selection HUD Floating Pill */
+.canvas-multiselect-badge {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38BDF8;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 18px;
+  border-radius: 9999px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(56, 189, 248, 0.25);
+  backdrop-filter: blur(14px);
+  z-index: 35;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  letter-spacing: 0.3px;
+}
+
+.light-theme .canvas-multiselect-badge {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(37, 99, 235, 0.45);
+  color: #2563EB;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12);
+}
+
 .canvas-controls-overlay {
   position: absolute;
   bottom: 20px;
