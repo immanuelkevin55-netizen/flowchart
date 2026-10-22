@@ -222,116 +222,6 @@ export default function App() {
     setSlides(next);
   }, [history, slides]);
 
-  // Global Keyboard Shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Ignore if user is currently typing in an input or textarea
-      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
-        e.preventDefault();
-        const allNodeIds = (activeSlide.nodes || []).map((n) => n.id);
-        if (allNodeIds.length > 0) {
-          handleSelectMultiple(allNodeIds, 'node');
-          showToast(`Selected all ${allNodeIds.length} flowchart shapes`, 'info');
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) handleRedo();
-        else handleUndo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-        e.preventDefault();
-        handleRedo();
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedIds.length > 0 || selectedId)) {
-        e.preventDefault();
-        if (selectedType === 'node') {
-          const idsToDelete = selectedIds.length > 0 ? selectedIds : [selectedId];
-          handleDeleteMultipleNodes(idsToDelete);
-        } else if (selectedType === 'connector' && selectedId) {
-          handleDeleteConnector(selectedId);
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedType === 'node') {
-        e.preventDefault();
-        const idsToDuplicate = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
-        if (idsToDuplicate.length > 0) {
-          handleDuplicateMultipleNodes(idsToDuplicate);
-        }
-      } else if (e.key === 'v' || e.key === 'V') {
-        setActiveTool('select');
-      } else if (e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A') {
-        setActiveTool('connector');
-        showToast('Draw Arrow Tool active! Click & drag anywhere to connect.', 'info');
-      } else if (e.key === '[' || e.key === '{') {
-        e.preventDefault();
-        setIsLeftSidebarOpen((prev) => !prev);
-      } else if (e.key === ']' || e.key === '}') {
-        e.preventDefault();
-        setIsRightSidebarOpen((prev) => !prev);
-      } else if (e.key === 'F5') {
-        e.preventDefault();
-        setIsPresenting(true);
-      } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-        if (isPresenting) return;
-        e.preventDefault();
-
-        const slideNodes = activeSlide.nodes || [];
-        if (slideNodes.length === 0) return;
-
-        // If specific nodes are selected, move them. Otherwise, move the entire flowchart!
-        const idsToNudge = (selectedType === 'node' && (selectedIds.length > 0 || selectedId))
-          ? (selectedIds.length > 0 ? selectedIds : [selectedId])
-          : slideNodes.map((n) => n.id);
-
-        const step = e.shiftKey ? 25 : 10;
-        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-
-        // Boundary clamping across all moving shapes so group spacing stays intact
-        const targetNodes = slideNodes.filter((n) => idsToNudge.includes(n.id));
-        let minAllowedDx = -Infinity;
-        let maxAllowedDx = Infinity;
-        let minAllowedDy = -Infinity;
-        let maxAllowedDy = Infinity;
-
-        targetNodes.forEach((node) => {
-          const minDx = 20 - node.x;
-          const maxDx = (DEFAULT_CANVAS_WIDTH - (node.width || 180) - 20) - node.x;
-          const minDy = 140 - node.y;
-          const maxDy = (DEFAULT_CANVAS_HEIGHT - (node.height || 80) - 20) - node.y;
-
-          if (minDx > minAllowedDx) minAllowedDx = minDx;
-          if (maxDx < maxAllowedDx) maxAllowedDx = maxDx;
-          if (minDy > minAllowedDy) minAllowedDy = minDy;
-          if (maxDy < maxAllowedDy) maxAllowedDy = maxDy;
-        });
-
-        const clampedDx = Math.max(minAllowedDx, Math.min(maxAllowedDx, dx));
-        const clampedDy = Math.max(minAllowedDy, Math.min(maxAllowedDy, dy));
-
-        if (clampedDx === 0 && clampedDy === 0) return;
-
-        updateCurrentSlide((s) => ({
-          ...s,
-          nodes: (s.nodes || []).map((n) => {
-            if (idsToNudge.includes(n.id)) {
-              return {
-                ...n,
-                x: Math.round(n.x + clampedDx),
-                y: Math.round(n.y + clampedDy)
-              };
-            }
-            return n;
-          })
-        }));
-      } else if (e.altKey && (e.key === 'a' || e.key === 'A')) {
-        e.preventDefault();
-        handleAlignMiddle();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, selectedType, selectedIds, activeSlide.nodes, handleUndo, handleRedo, handleSelectMultiple, handleAlignMiddle]);
 
   // Update current slide helper
   const updateCurrentSlide = (updater) => {
@@ -888,6 +778,117 @@ export default function App() {
       showToast('Started fresh presentation', 'info');
     }
   };
+
+  // Global Keyboard Shortcuts (Registered after all handlers are initialized)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if user is currently typing in an input or textarea
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        const allNodeIds = (activeSlide.nodes || []).map((n) => n.id);
+        if (allNodeIds.length > 0) {
+          handleSelectMultiple(allNodeIds, 'node');
+          showToast(`Selected all ${allNodeIds.length} flowchart shapes`, 'info');
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedIds.length > 0 || selectedId)) {
+        e.preventDefault();
+        if (selectedType === 'node') {
+          const idsToDelete = selectedIds.length > 0 ? selectedIds : [selectedId];
+          handleDeleteMultipleNodes(idsToDelete);
+        } else if (selectedType === 'connector' && selectedId) {
+          handleDeleteConnector(selectedId);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedType === 'node') {
+        e.preventDefault();
+        const idsToDuplicate = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
+        if (idsToDuplicate.length > 0) {
+          handleDuplicateMultipleNodes(idsToDuplicate);
+        }
+      } else if (e.key === 'v' || e.key === 'V') {
+        setActiveTool('select');
+      } else if (e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A') {
+        setActiveTool('connector');
+        showToast('Draw Arrow Tool active! Click & drag anywhere to connect.', 'info');
+      } else if (e.key === '[' || e.key === '{') {
+        e.preventDefault();
+        setIsLeftSidebarOpen((prev) => !prev);
+      } else if (e.key === ']' || e.key === '}') {
+        e.preventDefault();
+        setIsRightSidebarOpen((prev) => !prev);
+      } else if (e.key === 'F5') {
+        e.preventDefault();
+        setIsPresenting(true);
+      } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        if (isPresenting) return;
+        e.preventDefault();
+
+        const slideNodes = activeSlide.nodes || [];
+        if (slideNodes.length === 0) return;
+
+        // If specific nodes are selected, move them. Otherwise, move the entire flowchart!
+        const idsToNudge = (selectedType === 'node' && (selectedIds.length > 0 || selectedId))
+          ? (selectedIds.length > 0 ? selectedIds : [selectedId])
+          : slideNodes.map((n) => n.id);
+
+        const step = e.shiftKey ? 25 : 10;
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+
+        // Boundary clamping across all moving shapes so group spacing stays intact
+        const targetNodes = slideNodes.filter((n) => idsToNudge.includes(n.id));
+        let minAllowedDx = -Infinity;
+        let maxAllowedDx = Infinity;
+        let minAllowedDy = -Infinity;
+        let maxAllowedDy = Infinity;
+
+        targetNodes.forEach((node) => {
+          const minDx = 20 - node.x;
+          const maxDx = (DEFAULT_CANVAS_WIDTH - (node.width || 180) - 20) - node.x;
+          const minDy = 140 - node.y;
+          const maxDy = (DEFAULT_CANVAS_HEIGHT - (node.height || 80) - 20) - node.y;
+
+          if (minDx > minAllowedDx) minAllowedDx = minDx;
+          if (maxDx < maxAllowedDx) maxAllowedDx = maxDx;
+          if (minDy > minAllowedDy) minAllowedDy = minDy;
+          if (maxDy < maxAllowedDy) maxAllowedDy = maxDy;
+        });
+
+        const clampedDx = Math.max(minAllowedDx, Math.min(maxAllowedDx, dx));
+        const clampedDy = Math.max(minAllowedDy, Math.min(maxAllowedDy, dy));
+
+        if (clampedDx === 0 && clampedDy === 0) return;
+
+        updateCurrentSlide((s) => ({
+          ...s,
+          nodes: (s.nodes || []).map((n) => {
+            if (idsToNudge.includes(n.id)) {
+              return {
+                ...n,
+                x: Math.round(n.x + clampedDx),
+                y: Math.round(n.y + clampedDy)
+              };
+            }
+            return n;
+          })
+        }));
+      } else if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        handleAlignMiddle();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId, selectedType, selectedIds, activeSlide.nodes, handleUndo, handleRedo, handleSelectMultiple, handleAlignMiddle, handleDeleteMultipleNodes, handleDeleteConnector, handleDuplicateMultipleNodes, updateCurrentSlide, isPresenting]);
 
   // If unauthenticated, gate with the login screen
   if (!currentUser) {
