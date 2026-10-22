@@ -1017,6 +1017,7 @@ export default function App() {
         {/* Right Sidebar: Properties & Slide Notes Inspector */}
         <PropertyPanel
           selectedId={selectedId}
+          selectedIds={selectedIds}
           selectedType={selectedType}
           slide={activeSlide}
           theme={activeTheme}
@@ -1028,6 +1029,7 @@ export default function App() {
           onUpdateSlide={(updates) => updateCurrentSlide(updates)}
           isOpen={isRightSidebarOpen}
           onToggleOpen={() => setIsRightSidebarOpen(false)}
+          onAlignMiddle={handleAlignMiddle}
         />
       </div>
 

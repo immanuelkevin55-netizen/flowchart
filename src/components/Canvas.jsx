@@ -76,6 +76,11 @@ export default function Canvas({
   // Group Dragging state: { primaryId, startMouseX, startMouseY, initialPositions, hasDragged, wasMulti, shiftKey }
   const [groupDragState, setGroupDragState] = useState(null);
 
+  // Draw.io Smart Alignment Guides: Array of { type: 'horizontal'|'vertical', y, x, x1, x2, y1, y2 }
+  const [alignmentGuides, setAlignmentGuides] = useState([]);
+  // Live dragging coordinate tooltip: { x, y, text }
+  const [dragTooltip, setDragTooltip] = useState(null);
+
   // Connector drawing state
   // connecting: { fromId, fromPort, startX, startY, mouseX, mouseY }
   const [connecting, setConnecting] = useState(null);
@@ -572,25 +577,123 @@ export default function Canvas({
       return;
     }
 
-    // 4. Group Dragging (Move all selected flowchart shapes together!)
+    // 4. Group Dragging (Move all selected flowchart shapes together with Draw.io Smart Alignment)
     if (groupDragState) {
       groupDragState.hasDragged = true;
       const primaryInit = groupDragState.initialPositions[groupDragState.primaryId];
-      let dx = x - groupDragState.startMouseX;
-      let dy = y - groupDragState.startMouseY;
+      const rawDx = x - groupDragState.startMouseX;
+      const rawDy = y - groupDragState.startMouseY;
 
-      if (gridSnap && primaryInit) {
-        // Absolute grid snapping: locks dragged box top/left onto exact 20px grid multiples!
-        const targetX = primaryInit.x + dx;
-        const targetY = primaryInit.y + dy;
-        const snappedX = snapToGrid(targetX, 20);
-        const snappedY = snapToGrid(targetY, 20);
-        dx = snappedX - primaryInit.x;
-        dy = snappedY - primaryInit.y;
-      } else if (gridSnap) {
-        dx = snapToGrid(dx, 20);
-        dy = snapToGrid(dy, 20);
+      let targetX = primaryInit.x + rawDx;
+      let targetY = primaryInit.y + rawDy;
+      const w = primaryInit.width || 180;
+      const h = primaryInit.height || 80;
+
+      const otherNodes = (slide.nodes || []).filter(
+        (n) => !groupDragState.initialPositions[n.id]
+      );
+
+      const guides = [];
+      let snappedY = null;
+      let snappedX = null;
+      const SNAP_TOLERANCE = 8; // Magnetic snap within 8px
+
+      const cy = targetY + h / 2;
+      const cx = targetX + w / 2;
+
+      for (const other of otherNodes) {
+        const otherW = other.width || 180;
+        const otherH = other.height || 80;
+        const otherCy = other.y + otherH / 2;
+        const otherCx = other.x + otherW / 2;
+
+        // 1. Center-to-Center Horizontal Alignment (Draw.io Cyan line in Image 1!)
+        if (snappedY === null && Math.abs(cy - otherCy) <= SNAP_TOLERANCE) {
+          snappedY = Math.round(otherCy - h / 2);
+          guides.push({
+            type: 'horizontal',
+            y: otherCy,
+            x1: Math.min(targetX, other.x) - 40,
+            x2: Math.max(targetX + w, other.x + otherW) + 40
+          });
+        }
+
+        // 2. Top-Edge to Top-Edge Alignment
+        if (snappedY === null && Math.abs(targetY - other.y) <= SNAP_TOLERANCE - 2) {
+          snappedY = other.y;
+          guides.push({
+            type: 'horizontal',
+            y: other.y,
+            x1: Math.min(targetX, other.x) - 40,
+            x2: Math.max(targetX + w, other.x + otherW) + 40
+          });
+        }
+
+        // 3. Bottom-Edge to Bottom-Edge Alignment
+        if (snappedY === null && Math.abs((targetY + h) - (other.y + otherH)) <= SNAP_TOLERANCE - 2) {
+          snappedY = other.y + otherH - h;
+          guides.push({
+            type: 'horizontal',
+            y: other.y + otherH,
+            x1: Math.min(targetX, other.x) - 40,
+            x2: Math.max(targetX + w, other.x + otherW) + 40
+          });
+        }
+
+        // 4. Center-to-Center Vertical Alignment
+        if (snappedX === null && Math.abs(cx - otherCx) <= SNAP_TOLERANCE) {
+          snappedX = Math.round(otherCx - w / 2);
+          guides.push({
+            type: 'vertical',
+            x: otherCx,
+            y1: Math.min(targetY, other.y) - 40,
+            y2: Math.max(targetY + h, other.y + otherH) + 40
+          });
+        }
+
+        // 5. Left-Edge to Left-Edge Alignment
+        if (snappedX === null && Math.abs(targetX - other.x) <= SNAP_TOLERANCE - 2) {
+          snappedX = other.x;
+          guides.push({
+            type: 'vertical',
+            x: other.x,
+            y1: Math.min(targetY, other.y) - 40,
+            y2: Math.max(targetY + h, other.y + otherH) + 40
+          });
+        }
+
+        // 6. Right-Edge to Right-Edge Alignment
+        if (snappedX === null && Math.abs((targetX + w) - (other.x + otherW)) <= SNAP_TOLERANCE - 2) {
+          snappedX = other.x + otherW - w;
+          guides.push({
+            type: 'vertical',
+            x: other.x,
+            y1: Math.min(targetY, other.y) - 40,
+            y2: Math.max(targetY + h, other.y + otherH) + 40
+          });
+        }
       }
+
+      // If not snapped by smart guides, use absolute 20px grid snap
+      if (snappedX === null && gridSnap) {
+        snappedX = snapToGrid(targetX, 20);
+      }
+      if (snappedY === null && gridSnap) {
+        snappedY = snapToGrid(targetY, 20);
+      }
+
+      const effectiveX = snappedX !== null ? snappedX : targetX;
+      const effectiveY = snappedY !== null ? snappedY : targetY;
+
+      const dx = effectiveX - primaryInit.x;
+      const dy = effectiveY - primaryInit.y;
+
+      setAlignmentGuides(guides);
+      setDragTooltip({
+        x: effectiveX + w / 2,
+        y: effectiveY + h + 24,
+        text: `${Math.round(effectiveX)}, ${Math.round(effectiveY)}`
+      });
 
       // Constrain within slide boundaries
       const nodeIds = Object.keys(groupDragState.initialPositions);
@@ -682,6 +785,8 @@ export default function Canvas({
       }
       setGroupDragState(null);
     }
+    setAlignmentGuides([]);
+    setDragTooltip(null);
 
     if (draggingNode) {
       setDraggingNode(null);
@@ -1173,6 +1278,93 @@ export default function Canvas({
               rx={3}
               pointerEvents="none"
             />
+          )}
+
+          {/* Draw.io Style Smart Centering & Alignment Guide Lines */}
+          {alignmentGuides.map((g, idx) => (
+            <g key={`align-guide-${idx}`} className="canvas-alignment-guide" pointerEvents="none">
+              {g.type === 'horizontal' ? (
+                <>
+                  {/* Subtle wide glow */}
+                  <line
+                    x1={g.x1}
+                    y1={g.y}
+                    x2={g.x2}
+                    y2={g.y}
+                    stroke="rgba(0, 168, 255, 0.35)"
+                    strokeWidth={4}
+                  />
+                  {/* Crisp Draw.io cyan laser line */}
+                  <line
+                    x1={g.x1}
+                    y1={g.y}
+                    x2={g.x2}
+                    y2={g.y}
+                    stroke="#00A8FF"
+                    strokeWidth={1.5}
+                  />
+                  {/* End tick marks */}
+                  <line x1={g.x1} y1={g.y - 4} x2={g.x1} y2={g.y + 4} stroke="#00A8FF" strokeWidth={1.5} />
+                  <line x1={g.x2} y1={g.y - 4} x2={g.x2} y2={g.y + 4} stroke="#00A8FF" strokeWidth={1.5} />
+                </>
+              ) : (
+                <>
+                  {/* Subtle wide glow */}
+                  <line
+                    x1={g.x}
+                    y1={g.y1}
+                    x2={g.x}
+                    y2={g.y2}
+                    stroke="rgba(0, 168, 255, 0.35)"
+                    strokeWidth={4}
+                  />
+                  {/* Crisp Draw.io cyan laser line */}
+                  <line
+                    x1={g.x}
+                    y1={g.y1}
+                    x2={g.x}
+                    y2={g.y2}
+                    stroke="#00A8FF"
+                    strokeWidth={1.5}
+                  />
+                  {/* End tick marks */}
+                  <line x1={g.x - 4} y1={g.y1} x2={g.x + 4} y2={g.y1} stroke="#00A8FF" strokeWidth={1.5} />
+                  <line x1={g.x - 4} y1={g.y2} x2={g.x + 4} y2={g.y2} stroke="#00A8FF" strokeWidth={1.5} />
+                </>
+              )}
+            </g>
+          ))}
+
+          {/* Live Drag Coordinate Tooltip (Image 1 style) */}
+          {dragTooltip && (
+            <g
+              className="canvas-drag-coord-tooltip"
+              transform={`translate(${dragTooltip.x}, ${dragTooltip.y})`}
+              pointerEvents="none"
+            >
+              <rect
+                x={-36}
+                y={-12}
+                width={72}
+                height={22}
+                rx={4}
+                fill="#FFFFFF"
+                stroke="#D1D5DB"
+                strokeWidth={1}
+                filter="drop-shadow(0 2px 5px rgba(0,0,0,0.25))"
+              />
+              <text
+                x={0}
+                y={3}
+                textAnchor="middle"
+                fill="#1F2937"
+                fontSize={11}
+                fontFamily="var(--font-mono, monospace)"
+                fontWeight="600"
+              >
+                {dragTooltip.text}
+              </text>
+            </g>
           )}
 
           {/* Nodes Layer */}

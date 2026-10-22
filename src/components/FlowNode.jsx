@@ -57,16 +57,24 @@ export default function FlowNode({
     width = 200,
     height = 90,
     shape = SHAPE_TYPES.PROCESS,
-    fill = '#1E293B',
-    stroke = '#38BDF8',
+    fill: rawFill = '#1E293B',
+    stroke: rawStroke = '#38BDF8',
     strokeWidth = 2,
     strokeStyle = 'solid',
     textColor = '#F8FAFC',
     fontSize = 14,
     bold = false,
     italic = false,
-    textAlign = 'center'
+    underline = false,
+    fontFamily = 'inherit',
+    textAlign = 'center',
+    fillEnabled = true,
+    strokeEnabled = true,
+    opacity = 100
   } = node;
+
+  const fill = fillEnabled === false ? 'transparent' : rawFill;
+  const stroke = strokeEnabled === false ? 'transparent' : rawStroke;
 
   // Single clean port per edge
   const ports = [
@@ -251,7 +259,7 @@ export default function FlowNode({
       className={`flow-node-group ${isSelected ? 'selected' : ''} ${isHoveredAsSource ? 'source-active' : ''} ${isHoveredAsTarget ? 'target-active' : ''}`}
       transform={`translate(${x}, ${y})`}
       style={{
-        opacity: isDimmed ? 0.35 : 1,
+        opacity: isDimmed ? 0.35 : (opacity !== undefined ? opacity / 100 : 1),
         transition: 'opacity 0.2s ease'
       }}
       onClick={(e) => {
@@ -347,16 +355,17 @@ export default function FlowNode({
       )}
 
       {/* Node Drop Shadow / Selection Glow */}
+      {/* Node Selection Outline (Draw.io style dashed blue boundary) */}
       {isSelected && (
         <rect
-          x={-5}
-          y={-5}
-          width={width + 10}
-          height={height + 10}
-          rx={12}
+          x={-2}
+          y={-2}
+          width={width + 4}
+          height={height + 4}
+          rx={shape === SHAPE_TYPES.TERMINATOR ? Math.min(width, height) / 2 : 4}
           fill="none"
-          stroke="var(--accent-glow, #38BDF8)"
-          strokeWidth={2}
+          stroke="#00A8FF"
+          strokeWidth={1.5}
           strokeDasharray="4,4"
           className="node-selection-outline"
         />
@@ -379,6 +388,8 @@ export default function FlowNode({
               fontSize: `${fontSize}px`,
               fontWeight: bold ? 'bold' : 'normal',
               fontStyle: italic ? 'italic' : 'normal',
+              textDecoration: underline ? 'underline' : 'none',
+              fontFamily: fontFamily || 'inherit',
               color: textColor,
               textAlign
             }}
@@ -399,6 +410,8 @@ export default function FlowNode({
               fontSize: `${fontSize}px`,
               fontWeight: bold ? '700' : '500',
               fontStyle: italic ? 'italic' : 'normal',
+              textDecoration: underline ? 'underline' : 'none',
+              fontFamily: fontFamily || 'inherit',
               textAlign,
               display: 'flex',
               alignItems: 'center',
@@ -508,17 +521,15 @@ export default function FlowNode({
             >
               {/* Invisible wider hit target for effortless grab */}
               <circle cx={h.cx} cy={h.cy} r={8} fill="transparent" />
-              {/* Visible square handle */}
-              <rect
-                x={h.cx - 4}
-                y={h.cy - 4}
-                width={8}
-                height={8}
-                rx={1.5}
-                fill="#FFFFFF"
-                stroke="var(--brand-primary, #38BDF8)"
+              {/* Draw.io Crisp Cyan Circular Dot Handle */}
+              <circle
+                cx={h.cx}
+                cy={h.cy}
+                r={4.5}
+                fill="#00A8FF"
+                stroke="#FFFFFF"
                 strokeWidth={1.5}
-                className="resize-handle-rect"
+                className="resize-handle-circle"
               />
             </g>
           ))}
