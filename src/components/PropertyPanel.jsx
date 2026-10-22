@@ -20,7 +20,8 @@ import {
   PanelRightClose,
   Layers,
   MoveHorizontal,
-  MoveVertical
+  MoveVertical,
+  ArrowLeftRight
 } from 'lucide-react';
 
 export default function PropertyPanel({
@@ -37,7 +38,8 @@ export default function PropertyPanel({
   onUpdateSlide,
   isOpen = true,
   onToggleOpen,
-  onAlignMiddle
+  onAlignMiddle,
+  onSwapNodes
 }) {
   const [activeTab, setActiveTab] = useState('style'); // 'style' | 'text' | 'arrange'
 
@@ -653,6 +655,44 @@ export default function PropertyPanel({
                     Distribute
                   </button>
                 </div>
+              </div>
+
+              {/* Swap Steps Section */}
+              <div className="prop-group">
+                <label className="prop-label">Swap Steps</label>
+                {selectedIds && selectedIds.length === 2 ? (
+                  <button
+                    type="button"
+                    className="drawio-align-hero-btn swap"
+                    onClick={() => onSwapNodes && onSwapNodes(selectedIds[0], selectedIds[1])}
+                    title="Swap positions and links between the 2 selected shapes"
+                  >
+                    <ArrowLeftRight size={14} />
+                    <span>Swap Selected 2 Steps</span>
+                  </button>
+                ) : (
+                  <div>
+                    <select
+                      className="prop-select"
+                      defaultValue=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          onSwapNodes && onSwapNodes(selectedNode.id, e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                    >
+                      <option value="" disabled>Swap with another box...</option>
+                      {(slide.nodes || [])
+                        .filter((n) => n.id !== selectedNode.id)
+                        .map((n) => (
+                          <option key={n.id} value={n.id}>
+                            {n.text || `Box at (${Math.round(n.x)}, ${Math.round(n.y)})`}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Dimensions (Width / Height) */}

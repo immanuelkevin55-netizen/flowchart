@@ -555,6 +555,216 @@ export default function App() {
     showToast(`Linked all ${currentNodes.length} steps in sequence!`, 'success');
   };
 
+  // Insert a new step between two connected nodes and auto-shift downstream shapes
+  const handleInsertNodeBetween = useCallback((connectorId) => {
+    const conn = (activeSlide.connectors || []).find((c) => c.id === connectorId);
+    if (!conn) return;
+
+    const fromNode = (activeSlide.nodes || []).find(
+      (n) => n.id === (conn.fromId || conn.from)
+    );
+    const toNode = (activeSlide.nodes || []).find(
+      (n) => n.id === (conn.toId || conn.to)
+    );
+
+    if (!fromNode || !toNode) {
+      showToast('Cannot insert step: missing connected boxes', 'error');
+      return;
+    }
+
+    const dx = toNode.x - fromNode.x;
+    const dy = toNode.y - fromNode.y;
+    const isHorizontal = Math.abs(dx) >= Math.abs(dy);
+
+    const newNodeWidth = fromNode.width || 180;
+    const newNodeHeight = fromNode.height || 80;
+    const horizShift = newNodeWidth + 60; // 240px
+    const vertShift = newNodeHeight + 60;  // 140px
+
+    let newNodeX, newNodeY;
+    let shiftedNodes = [...(activeSlide.nodes || [])];
+
+    if (isHorizontal) {
+      if (toNode.x > fromNode.x) {
+        // Shift toNode and all downstream nodes
+        shiftedNodes = shiftedNodes.map((n) => {
+          if (n.x >= toNode.x) {
+            return { ...n, x: n.x + horizShift };
+          }
+          return n;
+        });
+        newNodeX = Math.round(fromNode.x + horizShift);
+        newNodeY = fromNode.y;
+      } else {
+        shiftedNodes = shiftedNodes.map((n) => {
+          if (n.x <= toNode.x) {
+            return { ...n, x: n.x - horizShift };
+          }
+          return n;
+        });
+        newNodeX = Math.round(fromNode.x - horizShift);
+        newNodeY = fromNode.y;
+      }
+    } else {
+      if (toNode.y > fromNode.y) {
+        shiftedNodes = shiftedNodes.map((n) => {
+          if (n.y >= toNode.y) {
+            return { ...n, y: n.y + vertShift };
+          }
+          return n;
+        });
+        newNodeX = fromNode.x;
+        newNodeY = Math.round(fromNode.y + vertShift);
+      } else {
+        shiftedNodes = shiftedNodes.map((n) => {
+          if (n.y <= toNode.y) {
+            return { ...n, y: n.y - vertShift };
+          }
+          return n;
+        });
+        newNodeX = fromNode.x;
+        newNodeY = Math.round(fromNode.y - vertShift);
+      }
+    }
+
+    const newNodeId = `node-${Date.now()}`;
+    const newNode = {
+      id: newNodeId,
+      x: snapToGrid(newNodeX, 20),
+      y: snapToGrid(newNodeY, 20),
+      width: newNodeWidth,
+      height: newNodeHeight,
+      shape: SHAPE_TYPES.PROCESS,
+      text: 'New Step',
+      fill: fromNode.fill || '#1E293B',
+      stroke: fromNode.stroke || '#38BDF8',
+      strokeWidth: fromNode.strokeWidth || 2,
+      textColor: fromNode.textColor || '#F8FAFC',
+      fontSize: fromNode.fontSize || 14
+    };
+
+    const conn1 = {
+      id: `conn-${Date.now()}-1`,
+      fromId: fromNode.id,
+      toId: newNodeId,
+      fromPort: conn.fromPort || (isHorizontal ? (toNode.x > fromNode.x ? 'right' : 'left') : (toNode.y > fromNode.y ? 'bottom' : 'top')),
+      toPort: isHorizontal ? (toNode.x > fromNode.x ? 'left' : 'right') : (toNode.y > fromNode.y ? 'top' : 'bottom'),
+      type: conn.type || 'orthogonal',
+      color: conn.color || '#38BDF8',
+      width: conn.width || 2,
+      style: conn.style || 'solid',
+      label: conn.label || ''
+    };
+
+    const conn2 = {
+      id: `conn-${Date.now()}-2`,
+      fromId: newNodeId,
+      toId: toNode.id,
+      fromPort: isHorizontal ? (toNode.x > fromNode.x ? 'right' : 'left') : (toNode.y > fromNode.y ? 'bottom' : 'top'),
+      toPort: conn.toPort || (isHorizontal ? (toNode.x > fromNode.x ? 'left' : 'right') : (toNode.y > fromNode.y ? 'top' : 'bottom')),
+      type: conn.type || 'orthogonal',
+      color: conn.color || '#38BDF8',
+      width: conn.width || 2,
+      style: conn.style || 'solid'
+    };
+
+    const remainingConnectors = (activeSlide.connectors || []).filter(
+      (c) => c.id !== conn.id
+    );
+
+    updateCurrentSlide((s) => ({
+      ...s,
+      nodes: [...shiftedNodes, newNode],
+      connectors: [...remainingConnectors, conn1, conn2]
+    }));
+
+    setSelectedId(newNodeId);
+    setSelectedType('node');
+    setSelectedIds([newNodeId]);
+    showToast('Inserted step in between & shifted downstream shapes cleanly!', 'success');
+  }, [activeSlide, updateCurrentSlide, showToast]);
+
+  // Swap positions and connection links between two nodes
+  const handleSwapNodes = useCallback((id1, id2) => {
+    if (!id1 || !id2 || id1 === id2) return;
+    const nodes = activeSlide.nodes || [];
+    const node1 = nodes.find((n) => n.id === id1);
+    const node2 = nodes.find((n) => n.id === id2);
+
+    if (!node1 || !node2) {
+      showToast('Select 2 boxes to swap', 'info');
+      return;
+    }
+
+    // 1. Swap canvas positions
+    const newNodes = nodes.map((n) => {
+      if (n.id === id1) {
+        return { ...n, x: node2.x, y: node2.y };
+      }
+      if (n.id === id2) {
+        return { ...n, x: node1.x, y: node1.y };
+      }
+      return n;
+    });
+
+    // 2. Smart connector rewiring
+    const newConnectors = (activeSlide.connectors || []).map((c) => {
+      const fromId = c.fromId || c.from;
+      const toId = c.toId || c.to;
+
+      // Direct connector between the two swapped nodes: reverse direction & ports
+      if (fromId === id1 && toId === id2) {
+        return {
+          ...c,
+          fromId: id2,
+          from: id2,
+          toId: id1,
+          to: id1,
+          fromPort: c.toPort,
+          toPort: c.fromPort
+        };
+      }
+      if (fromId === id2 && toId === id1) {
+        return {
+          ...c,
+          fromId: id1,
+          from: id1,
+          toId: id2,
+          to: id2,
+          fromPort: c.toPort,
+          toPort: c.fromPort
+        };
+      }
+
+      // Connectors linking to other nodes: swap endpoints
+      let newFrom = fromId;
+      let newTo = toId;
+      if (fromId === id1) newFrom = id2;
+      else if (fromId === id2) newFrom = id1;
+
+      if (toId === id1) newTo = id2;
+      else if (toId === id2) newTo = id1;
+
+      return {
+        ...c,
+        fromId: newFrom,
+        from: newFrom,
+        toId: newTo,
+        to: newTo
+      };
+    });
+
+    updateCurrentSlide((s) => ({
+      ...s,
+      nodes: newNodes,
+      connectors: newConnectors
+    }));
+
+    setSelectedIds([id1, id2]);
+    setSelectedType('node');
+    showToast(`Swapped "${node1.text || 'Step 1'}" and "${node2.text || 'Step 2'}"!`, 'success');
+  }, [activeSlide, updateCurrentSlide, showToast]);
+
   // 4. Modals and Templates
   const handleApplyTemplate = (template, asNewSlide = false) => {
     const tplTheme = THEMES[template.themeId] || activeTheme;
@@ -1009,6 +1219,8 @@ export default function App() {
             onUpdateSlide={(updates) => updateCurrentSlide(updates)}
             onOpenTemplates={() => setIsTemplatesOpen(true)}
             onAlignMiddle={handleAlignMiddle}
+            onInsertNodeBetween={handleInsertNodeBetween}
+            onSwapNodes={handleSwapNodes}
             showGrid={showGrid}
             gridSnap={gridSnap}
           />
@@ -1030,6 +1242,7 @@ export default function App() {
           isOpen={isRightSidebarOpen}
           onToggleOpen={() => setIsRightSidebarOpen(false)}
           onAlignMiddle={handleAlignMiddle}
+          onSwapNodes={handleSwapNodes}
         />
       </div>
 

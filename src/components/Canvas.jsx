@@ -3,7 +3,7 @@ import FlowNode from './FlowNode';
 import FlowConnector from './FlowConnector';
 import { snapToGrid, getConnectorEndpoints, getClosestPort, generateConnectorPath, computeConnectorLanes } from '../utils/geometry';
 import { DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT } from '../types/constants';
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer, ArrowRight, LayoutTemplate, Sparkles } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer, ArrowRight, LayoutTemplate, Sparkles, ArrowLeftRight } from 'lucide-react';
 
 export default function Canvas({
   slide,
@@ -26,6 +26,8 @@ export default function Canvas({
   onUpdateSlide,
   onOpenTemplates,
   onAlignMiddle,
+  onInsertNodeBetween,
+  onSwapNodes,
   showGrid = true,
   gridSnap = true
 }) {
@@ -80,6 +82,8 @@ export default function Canvas({
   const [alignmentGuides, setAlignmentGuides] = useState([]);
   // Live dragging coordinate tooltip: { x, y, text }
   const [dragTooltip, setDragTooltip] = useState(null);
+  // Live drag-and-drop swap candidate
+  const [swapCandidateNodeId, setSwapCandidateNodeId] = useState(null);
 
   // Connector drawing state
   // connecting: { fromId, fromPort, startX, startY, mouseX, mouseY }
@@ -695,8 +699,24 @@ export default function Canvas({
         text: `${Math.round(effectiveX)}, ${Math.round(effectiveY)}`
       });
 
-      // Constrain within slide boundaries
+      // Detect if single dragged node is hovering over another node for Drag-to-Swap
       const nodeIds = Object.keys(groupDragState.initialPositions);
+      let detectedSwapCandidate = null;
+      if (nodeIds.length === 1 && onSwapNodes) {
+        for (const other of otherNodes) {
+          const otherW = other.width || 180;
+          const otherH = other.height || 80;
+          const otherCx = other.x + otherW / 2;
+          const otherCy = other.y + otherH / 2;
+          if (Math.abs(cx - otherCx) < Math.min(otherW / 2, 55) && Math.abs(cy - otherCy) < Math.min(otherH / 2, 40)) {
+            detectedSwapCandidate = other.id;
+            break;
+          }
+        }
+      }
+      setSwapCandidateNodeId(detectedSwapCandidate);
+
+      // Constrain within slide boundaries
       let minAllowedDx = -Infinity;
       let maxAllowedDx = Infinity;
       let minAllowedDy = -Infinity;
@@ -778,6 +798,17 @@ export default function Canvas({
     }
 
     if (groupDragState) {
+      if (swapCandidateNodeId && groupDragState.hasDragged && onSwapNodes) {
+        const primaryId = groupDragState.primaryId;
+        const targetId = swapCandidateNodeId;
+        setSwapCandidateNodeId(null);
+        setGroupDragState(null);
+        setAlignmentGuides([]);
+        setDragTooltip(null);
+        onSwapNodes(primaryId, targetId);
+        return;
+      }
+
       if (!groupDragState.hasDragged && groupDragState.wasMulti && !groupDragState.shiftKey) {
         if (onSelectMultiple) {
           onSelectMultiple([groupDragState.primaryId], 'node');
@@ -787,6 +818,7 @@ export default function Canvas({
     }
     setAlignmentGuides([]);
     setDragTooltip(null);
+    setSwapCandidateNodeId(null);
 
     if (draggingNode) {
       setDraggingNode(null);
@@ -935,6 +967,23 @@ export default function Canvas({
           >
             <span>✨ Align Middle Straight</span>
           </button>
+          {(selectedIds || []).length === 2 && onSwapNodes && (
+            <>
+              <div className="canvas-multiselect-divider" />
+              <button
+                type="button"
+                className="canvas-multiselect-action-btn swap"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSwapNodes(selectedIds[0], selectedIds[1]);
+                }}
+                title="Swap positions and connection links between these 2 shapes"
+              >
+                <ArrowLeftRight size={13} />
+                <span>⇄ Swap 2 Nodes</span>
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1204,6 +1253,7 @@ export default function Canvas({
                   onUpdate={onUpdateConnector}
                   onDelete={onDeleteConnector}
                   onStartDragEndpoint={handleStartDragEndpoint}
+                  onInsertNodeBetween={onInsertNodeBetween}
                 />
               );
             })}
@@ -1366,6 +1416,44 @@ export default function Canvas({
               </text>
             </g>
           )}
+
+          {/* Drag-to-Swap Candidate Highlight Overlay */}
+          {swapCandidateNodeId && (() => {
+            const candidate = (slide.nodes || []).find((n) => n.id === swapCandidateNodeId);
+            if (!candidate) return null;
+            const cw = candidate.width || 180;
+            const ch = candidate.height || 80;
+            return (
+              <g
+                transform={`translate(${candidate.x}, ${candidate.y})`}
+                className="canvas-swap-candidate-overlay"
+                pointerEvents="none"
+              >
+                <rect
+                  x={-6}
+                  y={-6}
+                  width={cw + 12}
+                  height={ch + 12}
+                  rx={10}
+                  fill="rgba(0, 168, 255, 0.25)"
+                  stroke="#00A8FF"
+                  strokeWidth={3}
+                  strokeDasharray="6,4"
+                />
+                <foreignObject
+                  x={(cw - 130) / 2}
+                  y={(ch - 28) / 2}
+                  width={130}
+                  height={28}
+                >
+                  <div className="canvas-swap-indicator-pill" xmlns="http://www.w3.org/1999/xhtml">
+                    <ArrowLeftRight size={13} />
+                    <span>Drop to Swap</span>
+                  </div>
+                </foreignObject>
+              </g>
+            );
+          })()}
 
           {/* Nodes Layer */}
           <g className="canvas-nodes-layer">

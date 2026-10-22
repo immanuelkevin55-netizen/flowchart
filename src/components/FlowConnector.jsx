@@ -18,7 +18,8 @@ export default function FlowConnector({
   onHover,
   onUpdate,
   onDelete,
-  onStartDragEndpoint
+  onStartDragEndpoint,
+  onInsertNodeBetween
 }) {
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [labelInput, setLabelInput] = useState(connector.label || '');
@@ -251,6 +252,23 @@ export default function FlowConnector({
           <foreignObject x={3} y={3} width={14} height={14} style={{ pointerEvents: 'none' }}>
             <Trash2 size={13} color="#FFFFFF" />
           </foreignObject>
+        </g>
+      )}
+
+      {/* Insert Node in Between Button (Draw.io / Lucidchart style) */}
+      {(isSelected || isHovered) && onInsertNodeBetween && (
+        <g
+          transform={`translate(${mid.x - (isSelected ? 36 : 0)}, ${mid.y - 14})`}
+          className="connector-insert-node-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onInsertNodeBetween(id);
+          }}
+          title="Insert step in between these two boxes (+)"
+        >
+          <circle cx={10} cy={10} r={12} fill="#00A8FF" stroke="#FFFFFF" strokeWidth={1.5} filter="drop-shadow(0 2px 5px rgba(0,0,0,0.4))" />
+          <line x1={6} y1={10} x2={14} y2={10} stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" pointerEvents="none" />
+          <line x1={10} y1={6} x2={10} y2={14} stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" pointerEvents="none" />
         </g>
       )}
     </g>
