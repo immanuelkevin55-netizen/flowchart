@@ -1847,6 +1847,215 @@
   box-shadow: 0 0 14px rgba(0, 168, 255, 0.4);
 }
 
+/* --------------------------------------------------------------------------
+   Insert Step in Between Card (Connector Properties)
+   -------------------------------------------------------------------------- */
+.insert-step-card {
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(0, 168, 255, 0.08), rgba(15, 23, 42, 0.6));
+  border: 1px solid rgba(0, 168, 255, 0.3);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.insert-step-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.insert-step-icon {
+  color: #00A8FF;
+}
+
+.insert-step-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 0.3px;
+}
+
+.insert-step-context-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.node-tag {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.node-tag.from {
+  color: #38BDF8;
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.node-tag.to {
+  color: #34D399;
+  background: rgba(52, 211, 153, 0.15);
+}
+
+.arrow-sep {
+  color: var(--text-dim);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Visually Premium Drag-and-Drop Workflow Hierarchy
+   -------------------------------------------------------------------------- */
+.hierarchy-tree-card {
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.hierarchy-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.hierarchy-tree-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hierarchy-tree-icon {
+  color: #00A8FF;
+}
+
+.hierarchy-help-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+}
+
+.hierarchy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.hierarchy-step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.hierarchy-step-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-medium);
+}
+
+.hierarchy-step-row.is-selected {
+  background: rgba(0, 168, 255, 0.12);
+  border-color: #00A8FF;
+  box-shadow: 0 0 10px rgba(0, 168, 255, 0.25);
+}
+
+.hierarchy-step-row.is-drag-over {
+  border-top: 2px solid #00A8FF;
+  background: rgba(0, 168, 255, 0.2);
+}
+
+.hierarchy-step-row:active {
+  cursor: grabbing;
+}
+
+.hierarchy-drag-handle {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+.hierarchy-step-pill {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.hierarchy-step-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.hierarchy-step-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hierarchy-step-shape-tag {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: capitalize;
+}
+
+.hierarchy-step-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.hierarchy-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.hierarchy-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
 /* ==========================================================================
    7. MODALS
    ========================================================================== */

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   SHAPE_TYPES,
   CONNECTOR_TYPES
@@ -21,7 +21,11 @@ import {
   Layers,
   MoveHorizontal,
   MoveVertical,
-  ArrowLeftRight
+  ArrowLeftRight,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  PlusCircle
 } from 'lucide-react';
 
 export default function PropertyPanel({
@@ -39,9 +43,19 @@ export default function PropertyPanel({
   isOpen = true,
   onToggleOpen,
   onAlignMiddle,
-  onSwapNodes
+  onSwapNodes,
+  onInsertNodeBetween,
+  onReorderHierarchy
 }) {
   const [activeTab, setActiveTab] = useState('style'); // 'style' | 'text' | 'arrange'
+
+  // Connector Insert Step state
+  const [insertShapeType, setInsertShapeType] = useState(SHAPE_TYPES.PROCESS);
+  const [insertLabel, setInsertLabel] = useState('');
+
+  // Drag-and-drop Hierarchy state
+  const [draggedHierarchyIndex, setDraggedHierarchyIndex] = useState(null);
+  const [dragOverHierarchyIndex, setDragOverHierarchyIndex] = useState(null);
 
   const selectedNode =
     selectedType === 'node'
@@ -52,6 +66,20 @@ export default function PropertyPanel({
     selectedType === 'connector'
       ? (slide.connectors || []).find((c) => c.id === selectedId)
       : null;
+
+  const connFromNode = selectedConnector
+    ? (slide.nodes || []).find((n) => n.id === (selectedConnector.fromId || selectedConnector.from))
+    : null;
+
+  const connToNode = selectedConnector
+    ? (slide.nodes || []).find((n) => n.id === (selectedConnector.toId || selectedConnector.to))
+    : null;
+
+  // Order nodes by flowchart execution sequence (left-to-right by X, then Y)
+  const hierarchyNodes = useMemo(() => {
+    const nodes = [...(slide.nodes || [])];
+    return nodes.sort((a, b) => a.x - b.x || a.y - b.y);
+  }, [slide.nodes]);
 
   const STYLE_PRESETS = [
     { label: 'White Slate', fill: '#FFFFFF', stroke: '#64748B', text: '#0F172A' },
@@ -592,6 +620,144 @@ export default function PropertyPanel({
           {/* TAB 3: ARRANGE */}
           {activeTab === 'arrange' && (
             <div className="drawio-tab-panel">
+              {/* Visually Premium Drag-and-Drop Workflow Hierarchy */}
+              <div className="prop-group hierarchy-tree-card">
+                <div className="hierarchy-tree-header">
+                  <div className="hierarchy-tree-title-row">
+                    <Layers size={14} className="hierarchy-tree-icon" />
+                    <span className="prop-label" style={{ margin: 0 }}>Workflow Hierarchy</span>
+                  </div>
+                  <span className="hierarchy-help-badge">Drag &amp; drop to reorder</span>
+                </div>
+
+                <div className="hierarchy-list">
+                  {hierarchyNodes.map((node, index) => {
+                    const isCurrent = node.id === selectedNode.id;
+                    const isDragOver = dragOverHierarchyIndex === index;
+
+                    return (
+                      <div
+                        key={node.id}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedHierarchyIndex(index);
+                          e.dataTransfer.setData('text/plain', index);
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (dragOverHierarchyIndex !== index) {
+                            setDragOverHierarchyIndex(index);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverHierarchyIndex === index) {
+                            setDragOverHierarchyIndex(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverHierarchyIndex(null);
+                          const fromIdx = draggedHierarchyIndex;
+                          const toIdx = index;
+                          if (fromIdx !== null && fromIdx !== toIdx) {
+                            const reordered = [...hierarchyNodes];
+                            const [moved] = reordered.splice(fromIdx, 1);
+                            reordered.splice(toIdx, 0, moved);
+                            onReorderHierarchy && onReorderHierarchy(reordered.map((n) => n.id));
+                          }
+                          setDraggedHierarchyIndex(null);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedHierarchyIndex(null);
+                          setDragOverHierarchyIndex(null);
+                        }}
+                        className={`hierarchy-step-row ${isCurrent ? 'is-selected' : ''} ${isDragOver ? 'is-drag-over' : ''}`}
+                        onClick={() => onUpdateNode && onUpdateNode(node.id, {})}
+                      >
+                        <div className="hierarchy-drag-handle" title="Drag to reorder step sequence">
+                          <GripVertical size={13} />
+                        </div>
+                        <div className="hierarchy-step-pill">#{index + 1}</div>
+                        <div className="hierarchy-step-content" title={node.text || 'Untitled Step'}>
+                          <span className="hierarchy-step-text">{node.text || 'Untitled Step'}</span>
+                          <span className="hierarchy-step-shape-tag">{node.shape || 'process'}</span>
+                        </div>
+                        <div className="hierarchy-step-actions">
+                          {index > 0 && (
+                            <button
+                              type="button"
+                              className="hierarchy-action-btn"
+                              title="Nudge Up in Sequence"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const reordered = [...hierarchyNodes];
+                                const temp = reordered[index - 1];
+                                reordered[index - 1] = reordered[index];
+                                reordered[index] = temp;
+                                onReorderHierarchy && onReorderHierarchy(reordered.map((n) => n.id));
+                              }}
+                            >
+                              <ChevronUp size={12} />
+                            </button>
+                          )}
+                          {index < hierarchyNodes.length - 1 && (
+                            <button
+                              type="button"
+                              className="hierarchy-action-btn"
+                              title="Nudge Down in Sequence"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const reordered = [...hierarchyNodes];
+                                const temp = reordered[index + 1];
+                                reordered[index + 1] = reordered[index];
+                                reordered[index] = temp;
+                                onReorderHierarchy && onReorderHierarchy(reordered.map((n) => n.id));
+                              }}
+                            >
+                              <ChevronDown size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Quick Upstream / Downstream Swap Actions */}
+                {(() => {
+                  const currentIndex = hierarchyNodes.findIndex((n) => n.id === selectedNode.id);
+                  const prevNode = currentIndex > 0 ? hierarchyNodes[currentIndex - 1] : null;
+                  const nextNode = currentIndex < hierarchyNodes.length - 1 ? hierarchyNodes[currentIndex + 1] : null;
+
+                  return (
+                    <div className="two-col-row" style={{ marginTop: '8px' }}>
+                      <button
+                        type="button"
+                        disabled={!prevNode}
+                        className="drawio-secondary-btn"
+                        title={prevNode ? `Swap with previous step: "${prevNode.text || 'Step'}"` : 'No previous step'}
+                        onClick={() => prevNode && onSwapNodes && onSwapNodes(selectedNode.id, prevNode.id)}
+                      >
+                        <ArrowLeftRight size={12} />
+                        <span>Swap Previous</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!nextNode}
+                        className="drawio-secondary-btn"
+                        title={nextNode ? `Swap with next step: "${nextNode.text || 'Step'}"` : 'No next step'}
+                        onClick={() => nextNode && onSwapNodes && onSwapNodes(selectedNode.id, nextNode.id)}
+                      >
+                        <ArrowLeftRight size={12} />
+                        <span>Swap Next</span>
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+
               {/* Straight Alignment Section (Draw.io Hero) */}
               <div className="prop-group">
                 <label className="prop-label">Align to Same Line</label>
@@ -655,44 +821,6 @@ export default function PropertyPanel({
                     Distribute
                   </button>
                 </div>
-              </div>
-
-              {/* Swap Steps Section */}
-              <div className="prop-group">
-                <label className="prop-label">Swap Steps</label>
-                {selectedIds && selectedIds.length === 2 ? (
-                  <button
-                    type="button"
-                    className="drawio-align-hero-btn swap"
-                    onClick={() => onSwapNodes && onSwapNodes(selectedIds[0], selectedIds[1])}
-                    title="Swap positions and links between the 2 selected shapes"
-                  >
-                    <ArrowLeftRight size={14} />
-                    <span>Swap Selected 2 Steps</span>
-                  </button>
-                ) : (
-                  <div>
-                    <select
-                      className="prop-select"
-                      defaultValue=""
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          onSwapNodes && onSwapNodes(selectedNode.id, e.target.value);
-                          e.target.value = '';
-                        }
-                      }}
-                    >
-                      <option value="" disabled>Swap with another box...</option>
-                      {(slide.nodes || [])
-                        .filter((n) => n.id !== selectedNode.id)
-                        .map((n) => (
-                          <option key={n.id} value={n.id}>
-                            {n.text || `Box at (${Math.round(n.x)}, ${Math.round(n.y)})`}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                )}
               </div>
 
               {/* Dimensions (Width / Height) */}
@@ -842,6 +970,81 @@ export default function PropertyPanel({
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Hero Feature: Insert Step in Between with Shape Selector */}
+          <div className="prop-group insert-step-card">
+            <div className="insert-step-header">
+              <PlusCircle size={15} className="insert-step-icon" />
+              <span className="insert-step-title">Insert Step in Between</span>
+            </div>
+
+            {connFromNode && connToNode ? (
+              <>
+                <div className="insert-step-context-pill">
+                  <span className="node-tag from" title={connFromNode.text || 'Source'}>
+                    {connFromNode.text || 'Source Step'}
+                  </span>
+                  <span className="arrow-sep">➔</span>
+                  <span className="node-tag to" title={connToNode.text || 'Target'}>
+                    {connToNode.text || 'Target Step'}
+                  </span>
+                </div>
+
+                <div className="prop-group" style={{ marginTop: '8px' }}>
+                  <label className="prop-label">Desired Shape Type</label>
+                  <select
+                    className="prop-select"
+                    value={insertShapeType}
+                    onChange={(e) => setInsertShapeType(e.target.value)}
+                  >
+                    <option value={SHAPE_TYPES.PROCESS}>Process (Rectangle)</option>
+                    <option value={SHAPE_TYPES.DECISION}>Decision (Diamond)</option>
+                    <option value={SHAPE_TYPES.TERMINATOR}>Start / End (Pill)</option>
+                    <option value={SHAPE_TYPES.SUBPROCESS}>Sub-process (Task)</option>
+                    <option value={SHAPE_TYPES.DATABASE}>Database (Cylinder)</option>
+                    <option value={SHAPE_TYPES.DOCUMENT}>Document (Report)</option>
+                    <option value={SHAPE_TYPES.DATA}>Data (Input/Output)</option>
+                    <option value={SHAPE_TYPES.PREPARATION}>Preparation (Hexagon)</option>
+                  </select>
+                </div>
+
+                <div className="prop-group" style={{ marginTop: '6px' }}>
+                  <label className="prop-label">New Step Label</label>
+                  <input
+                    type="text"
+                    className="prop-input"
+                    placeholder="e.g. Verify Credentials, Process Payment..."
+                    value={insertLabel}
+                    onChange={(e) => setInsertLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        onInsertNodeBetween && onInsertNodeBetween(selectedConnector.id, insertShapeType, insertLabel);
+                        setInsertLabel('');
+                      }
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="drawio-align-hero-btn"
+                  style={{ marginTop: '8px' }}
+                  onClick={() => {
+                    onInsertNodeBetween && onInsertNodeBetween(selectedConnector.id, insertShapeType, insertLabel);
+                    setInsertLabel('');
+                  }}
+                  title="Insert this new shape directly between the two connected boxes"
+                >
+                  <PlusCircle size={15} />
+                  <span>Insert Step in Between</span>
+                </button>
+              </>
+            ) : (
+              <div className="prop-help-text" style={{ padding: '4px 0' }}>
+                Both ends of this arrow must be connected to steps to insert in between.
+              </div>
+            )}
           </div>
 
           {/* Connector Routing Type */}

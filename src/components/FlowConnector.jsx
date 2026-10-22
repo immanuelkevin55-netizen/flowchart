@@ -142,101 +142,6 @@ export default function FlowConnector({
         </g>
       )}
 
-      {/* Interactive Floating Connection Tooltip on Hover */}
-      {isHovered && !isEditingLabel && (fromNode || toNode) && (
-        <g
-          transform={`translate(${mid.x}, ${mid.y - (label ? 24 : 16)})`}
-          className="connector-hover-tooltip"
-          style={{ pointerEvents: 'none' }}
-        >
-          <rect
-            x={-Math.max(38, (tooltipText.length * 6.5 + 20) / 2)}
-            y={-11}
-            width={Math.max(76, tooltipText.length * 6.5 + 20)}
-            height={22}
-            rx={11}
-            fill="#0F172A"
-            stroke={color}
-            strokeWidth={1.5}
-            filter="drop-shadow(0 2px 8px rgba(0,0,0,0.5))"
-          />
-          <text
-            x={0}
-            y={4}
-            textAnchor="middle"
-            fill="#F8FAFC"
-            fontSize="10px"
-            fontWeight="600"
-            letterSpacing="0.3px"
-          >
-            {tooltipText}
-          </text>
-        </g>
-      )}
-
-      {/* Connector Label Badge */}
-      {(label || isEditingLabel || isSelected) && (
-        <g
-          transform={`translate(${mid.x}, ${mid.y})`}
-          className="connector-label-group"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(id, e);
-          }}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            setLabelInput(label);
-            setIsEditingLabel(true);
-          }}
-        >
-          {isEditingLabel ? (
-            <foreignObject x={-60} y={-16} width={120} height={32}>
-              <input
-                type="text"
-                className="connector-inline-input"
-                autoFocus
-                value={labelInput}
-                onChange={(e) => setLabelInput(e.target.value)}
-                onBlur={handleLabelSubmit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleLabelSubmit();
-                  if (e.key === 'Escape') setIsEditingLabel(false);
-                }}
-              />
-            </foreignObject>
-          ) : (
-            <g>
-              <rect
-                x={-Math.max(26, (label.length * 7 + 18) / 2)}
-                y={-12}
-                width={Math.max(52, label.length * 7 + 18)}
-                height={24}
-                rx={12}
-                className="connector-label-bg"
-                style={{
-                  fill: 'var(--panel-bg, #1E293B)',
-                  stroke: color,
-                  strokeWidth: 1.5
-                }}
-              />
-              <text
-                x={0}
-                y={4}
-                textAnchor="middle"
-                className="connector-label-text"
-                style={{
-                  fill: 'var(--text-main, #F8FAFC)',
-                  fontSize: '11px',
-                  fontWeight: '600'
-                }}
-              >
-                {label || '+ Label'}
-              </text>
-            </g>
-          )}
-        </g>
-      )}
-
       {/* Delete button when connector is selected */}
       {isSelected && !isEditingLabel && (
         <g
@@ -252,23 +157,6 @@ export default function FlowConnector({
           <foreignObject x={3} y={3} width={14} height={14} style={{ pointerEvents: 'none' }}>
             <Trash2 size={13} color="#FFFFFF" />
           </foreignObject>
-        </g>
-      )}
-
-      {/* Insert Node in Between Button (Draw.io / Lucidchart style) */}
-      {(isSelected || isHovered) && onInsertNodeBetween && (
-        <g
-          transform={`translate(${mid.x - (isSelected ? 36 : 0)}, ${mid.y - 14})`}
-          className="connector-insert-node-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            onInsertNodeBetween(id);
-          }}
-          title="Insert step in between these two boxes (+)"
-        >
-          <circle cx={10} cy={10} r={12} fill="#00A8FF" stroke="#FFFFFF" strokeWidth={1.5} filter="drop-shadow(0 2px 5px rgba(0,0,0,0.4))" />
-          <line x1={6} y1={10} x2={14} y2={10} stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" pointerEvents="none" />
-          <line x1={10} y1={6} x2={10} y2={14} stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" pointerEvents="none" />
         </g>
       )}
     </g>

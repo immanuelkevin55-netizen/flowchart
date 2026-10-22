@@ -556,7 +556,7 @@ export default function App() {
   };
 
   // Insert a new step between two connected nodes and auto-shift downstream shapes
-  const handleInsertNodeBetween = useCallback((connectorId) => {
+  const handleInsertNodeBetween = useCallback((connectorId, shapeType = SHAPE_TYPES.PROCESS, customText = '') => {
     const conn = (activeSlide.connectors || []).find((c) => c.id === connectorId);
     if (!conn) return;
 
@@ -634,8 +634,8 @@ export default function App() {
       y: snapToGrid(newNodeY, 20),
       width: newNodeWidth,
       height: newNodeHeight,
-      shape: SHAPE_TYPES.PROCESS,
-      text: 'New Step',
+      shape: shapeType || SHAPE_TYPES.PROCESS,
+      text: customText || 'New Step',
       fill: fromNode.fill || '#1E293B',
       stroke: fromNode.stroke || '#38BDF8',
       strokeWidth: fromNode.strokeWidth || 2,
@@ -764,6 +764,56 @@ export default function App() {
     setSelectedType('node');
     showToast(`Swapped "${node1.text || 'Step 1'}" and "${node2.text || 'Step 2'}"!`, 'success');
   }, [activeSlide, updateCurrentSlide, showToast]);
+
+  // Reorder flowchart nodes to match new drag-and-drop hierarchy order
+  const handleReorderHierarchy = useCallback((newOrderedIds) => {
+    if (!newOrderedIds || newOrderedIds.length < 2) return;
+    const currentNodes = activeSlide.nodes || [];
+    if (currentNodes.length < 2) return;
+
+    // Get nodes sorted by their existing coordinates to preserve canvas layout slots
+    const originalSlots = [...currentNodes]
+      .sort((a, b) => a.x - b.x || a.y - b.y)
+      .map((n) => ({ x: n.x, y: n.y }));
+
+    // Map each reordered node to its new slot
+    const updatedNodes = currentNodes.map((node) => {
+      const newIndex = newOrderedIds.indexOf(node.id);
+      if (newIndex !== -1 && originalSlots[newIndex]) {
+        return {
+          ...node,
+          x: originalSlots[newIndex].x,
+          y: originalSlots[newIndex].y
+        };
+      }
+      return node;
+    });
+
+    // Auto-reconnect sequentially in the new hierarchy order
+    const updatedConnectors = [];
+    for (let i = 0; i < newOrderedIds.length - 1; i++) {
+      updatedConnectors.push({
+        id: `conn-hier-${Date.now()}-${i}`,
+        fromId: newOrderedIds[i],
+        toId: newOrderedIds[i + 1],
+        fromPort: 'right',
+        toPort: 'left',
+        label: '',
+        type: 'orthogonal',
+        color: activeTheme.connector || '#38BDF8',
+        width: 2,
+        style: 'solid'
+      });
+    }
+
+    updateCurrentSlide((s) => ({
+      ...s,
+      nodes: updatedNodes,
+      connectors: updatedConnectors
+    }));
+
+    showToast('Reordered flowchart sequence cleanly!', 'success');
+  }, [activeSlide.nodes, activeTheme.connector, updateCurrentSlide, showToast]);
 
   // 4. Modals and Templates
   const handleApplyTemplate = (template, asNewSlide = false) => {
@@ -1243,6 +1293,8 @@ export default function App() {
           onToggleOpen={() => setIsRightSidebarOpen(false)}
           onAlignMiddle={handleAlignMiddle}
           onSwapNodes={handleSwapNodes}
+          onInsertNodeBetween={handleInsertNodeBetween}
+          onReorderHierarchy={handleReorderHierarchy}
         />
       </div>
 
